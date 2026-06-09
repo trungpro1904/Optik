@@ -741,6 +741,7 @@ class CameraManagerHelper(private val context: Context) {
     
                             if (isRecording) {
                                 mediaRecorder?.start()
+                                glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
                             }
                         } catch (e: Exception) {
                             Log.e("CameraHelper", "Error starting preview", e)
@@ -815,7 +816,6 @@ class CameraManagerHelper(private val context: Context) {
             pfd.close()
 
             isRecording = true
-            glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
             openCamera(textureView)
             return true
             

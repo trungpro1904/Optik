@@ -156,7 +156,6 @@ class GlVideoProcessor(private val context: Context) {
 
             lutFilter?.draw(cameraTextureId, mvpMatrix, transformMatrix)
             
-            it.setPresentationTime(timestamp)
             it.swapBuffers()
         }
     }
