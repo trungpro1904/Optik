@@ -178,6 +178,7 @@ class SettingsActivity : AppCompatActivity() {
                 updateRowValue(binding.rowPhotoResolution.root, settings.photoResolution)
             }
         }
+        cameraHelper.fetchCameras()
         cameraHelper.fetchResolutions()
     }
 }

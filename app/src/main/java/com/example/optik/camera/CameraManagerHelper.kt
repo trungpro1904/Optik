@@ -313,18 +313,37 @@ class CameraManagerHelper(private val context: Context) {
 
             val videoConfigs = mutableListOf<VideoConfig>()
             val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            
+            // Lấy thông tin năng lực của bộ mã hóa Video H.264 (AVC)
+            val codecList = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+            val avcCodecInfo = codecList.codecInfos.firstOrNull { it.isEncoder && it.supportedTypes.contains(android.media.MediaFormat.MIMETYPE_VIDEO_AVC) }
+            val videoCaps = avcCodecInfo?.getCapabilitiesForType(android.media.MediaFormat.MIMETYPE_VIDEO_AVC)?.videoCapabilities
+
             configMap?.getOutputSizes(android.media.MediaRecorder::class.java)?.forEach { size ->
                 val secondsPerFrame = configMap.getOutputMinFrameDuration(android.media.MediaRecorder::class.java, size)
-                var maxFps = if (secondsPerFrame > 0) (1.0 / (secondsPerFrame / 1_000_000_000.0)).toInt() else 30
+                var sensorMaxFps = if (secondsPerFrame > 0) (1.0 / (secondsPerFrame / 1_000_000_000.0)).toInt() else 30
                 
                 try {
                     if (configMap.highSpeedVideoSizes?.contains(size) == true) {
                         val ranges = configMap.getHighSpeedVideoFpsRangesFor(size)
-                        ranges?.forEach { r -> if (r.upper > maxFps) maxFps = r.upper }
+                        ranges?.forEach { r -> if (r.upper > sensorMaxFps) sensorMaxFps = r.upper }
                     }
                 } catch (e: Exception) {}
+
+                var encoderMaxFps = 30
+                try {
+                    if (videoCaps != null && videoCaps.isSizeSupported(size.width, size.height)) {
+                        val supportedFrameRates = videoCaps.getSupportedFrameRatesFor(size.width, size.height)
+                        encoderMaxFps = supportedFrameRates.upper.toInt()
+                    }
+                } catch (e: Exception) {
+                    encoderMaxFps = 30
+                }
                 
-                videoConfigs.add(VideoConfig(size.width, size.height, maxFps))
+                // Lấy giá trị nhỏ nhất giữa khả năng của cảm biến và giới hạn của bộ mã hóa
+                val realMaxFps = Math.min(sensorMaxFps, encoderMaxFps)
+                
+                videoConfigs.add(VideoConfig(size.width, size.height, realMaxFps))
             }
 
             onCameraInfoAvailable?.invoke(CameraInfo(
