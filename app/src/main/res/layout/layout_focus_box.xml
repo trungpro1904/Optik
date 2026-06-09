@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/focus_box_container"
+    android:layout_width="72dp"
+    android:layout_height="72dp"
+    android:visibility="gone">
+
+    <View
+        android:id="@+id/focus_box_border"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:background="@drawable/focus_border" />
+
+    <ImageView
+        android:id="@+id/btn_focus_cancel"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="top|end"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:background="@drawable/circle_white"
+        app:tint="#000000"
+        android:padding="4dp"
+        android:clickable="true"
+        android:focusable="true" />
+</FrameLayout>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Optik Theme Colors -->
+    <color name="bg_dark">#1E1E1E</color>
+    <color name="bg_panel">#222222</color>
+    <color name="bg_preview_basic">#666666</color>
+    <color name="bg_preview_manual">#7D8B7D</color>
+    <color name="bg_settings">#3F445B</color>
+
+    <color name="accent_orange">#FF8C00</color>
+    <color name="accent_purple">#6C4BFF</color>
+    <color name="recording_red">#FF4B4B</color>
+
+    <color name="text_white">#FFFFFF</color>
+    <color name="text_gray">#B3B3B3</color>
+</resources>

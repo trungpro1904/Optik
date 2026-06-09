@@ -1,0 +1,47 @@
+<resources>
+    <string name="app_name">Optik</string>
+
+    <!-- Basic & Manual Mode -->
+    <string name="mode_basic">Basic</string>
+    <string name="mode_manual">Manual</string>
+    <string name="mode_video">Video</string>
+    <string name="mode_photo">Photo</string>
+    <string name="resolution_48mp">48mp</string>
+    <string name="ev">Ev</string>
+    <string name="ratio_4_3">4:3</string>
+    <string name="album">album</string>
+    <string name="disp">DISP</string>
+    <string name="focal_length_placeholder">- mm</string>
+    <string name="shutter_speed_placeholder">1/250</string>
+    <string name="aperture_placeholder">F --</string>
+    <string name="iso_auto">ISO AUTO</string>
+    <string name="zoom_0_5x">0.5x</string>
+    <string name="zoom_1_0x">1x</string>
+    <string name="zoom_2_0x">2x</string>
+    
+    <!-- Settings -->
+    <string name="setting_save_location">Lưu vị trí?</string>
+    <string name="setting_default_img_format">Định dạng ảnh mặc định</string>
+    <string name="setting_default_img_res">Độ phân giải ảnh mặc định</string>
+    <string name="setting_raw_compression">Nén ảnh RAW</string>
+    <string name="setting_default_vid_format">Định dạng video mặc định</string>
+    <string name="setting_grid">Lưới</string>
+    <string name="setting_level">Thước</string>
+    <string name="setting_histogram">Histogram</string>
+    <string name="setting_default_ratio">Tỷ lệ khung hình mặc định</string>
+    <string name="setting_vibrate">Rung?</string>
+    <string name="setting_startup_mode">Chế độ chụp khởi chạy</string>
+    <string name="setting_volume_keys">Dùng phím âm lượng là</string>
+    <string name="setting_touch_screen">Chạm vào màn hình để</string>
+    <string name="setting_shutter_sound">Âm thanh chụp</string>
+    <string name="setting_tutorial">Hướng dẫn</string>
+    
+    <!-- Settings Values -->
+    <string name="val_jpeg">JPEG</string>
+    <string name="val_mp_placeholder">--MP</string>
+    <string name="val_uncompressed">Không nén</string>
+    <string name="val_hd_60fps">HD 60fps</string>
+    <string name="val_cd_chup_truoc">CĐ chụp trước</string>
+    <string name="val_zoom">Zoom</string>
+    <string name="val_track_object">Dò tìm đối tượng</string>
+</resources>
