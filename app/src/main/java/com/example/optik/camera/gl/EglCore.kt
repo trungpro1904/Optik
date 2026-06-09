@@ -87,7 +87,9 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
             EGL14.EGL_RED_SIZE, 8,
             EGL14.EGL_GREEN_SIZE, 8,
             EGL14.EGL_BLUE_SIZE, 8,
+            EGL14.EGL_ALPHA_SIZE, 8,
             EGL14.EGL_RENDERABLE_TYPE, renderableType,
+            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT or EGL14.EGL_PBUFFER_BIT,
             EGL14.EGL_NONE, 0,
             EGL14.EGL_NONE
         )

@@ -226,8 +226,7 @@ class ManualActivity : AppCompatActivity() {
         val viewsToRotate = listOf(
             binding.btnMenu,
             binding.btnAlbum,
-            binding.bottomPanel.findViewById(R.id.btn_switch),
-            binding.bottomPanel.findViewById(R.id.tv_mp),
+            binding.bottomPanel.findViewById<View>(R.id.tv_mp),
             findViewById(R.id.focal_length),
             findViewById(R.id.btn_mode),
             findViewById(R.id.btn_disp),
