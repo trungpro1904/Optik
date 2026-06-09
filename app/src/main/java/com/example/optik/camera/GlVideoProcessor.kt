@@ -37,8 +37,9 @@ class GlVideoProcessor(private val context: Context) {
         }
 
     fun start() {
-        handlerThread = HandlerThread("GlVideoProcessor").apply { start() }
-        handler = Handler(handlerThread!!.looper)
+        val thread = HandlerThread("GlVideoProcessor").apply { start() }
+        handlerThread = thread
+        handler = Handler(thread.looper)
 
         handler?.post {
             initGL()

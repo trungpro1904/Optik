@@ -165,8 +165,9 @@ class GlLutFilter(private val context: Context) {
         }
 
         val bitmap = try {
-            val inputStream = context.assets.open(assetFileName)
-            BitmapFactory.decodeStream(inputStream)
+            context.assets.open(assetFileName).use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null
