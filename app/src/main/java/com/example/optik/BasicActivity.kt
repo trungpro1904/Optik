@@ -252,8 +252,8 @@ class BasicActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        val lutNames = listOf("Gốc", "Backrooms", "Chrome", "Cyberpunk", "Kodacolor", "Light Skin", "Hail Mary", "Retro", "Saturate", "Summer")
-        val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cyberpunk_800t.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG")
+        val lutNames = listOf("Gốc", "Backrooms", "Classic Chrome", "Cyberpunk", "Kodacolor", "Light Skin", "Hail Mary", "Retro", "Saturate", "Summer", "Fujifilm C400", "Leica Monochrome")
+        val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cyberpunk_800t.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG", "fuji_c400.PNG", "leica_monochrome.PNG")
         val lutAdapter = LUTAdapter(lutNames) { selectedLut ->
             val index = lutNames.indexOf(selectedLut)
             if (index >= 0) {
