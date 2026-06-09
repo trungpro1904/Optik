@@ -43,6 +43,8 @@ class CameraManagerHelper(private val context: Context) {
     private var captureSession: CameraCaptureSession? = null
     private var captureRequestBuilder: CaptureRequest.Builder? = null
     
+    private val glVideoProcessor = GlVideoProcessor(context)
+    
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
@@ -114,14 +116,17 @@ class CameraManagerHelper(private val context: Context) {
 
     fun setSelectedLut(fileName: String?) {
         selectedLutFileName = fileName
+        glVideoProcessor.setLut(fileName)
     }
 
     fun startBackgroundThread() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
         backgroundHandler = Handler(backgroundThread!!.looper)
+        glVideoProcessor.start()
     }
 
     fun stopBackgroundThread() {
+        glVideoProcessor.stop()
         backgroundThread?.quitSafely()
         try {
             backgroundThread?.join()
@@ -645,6 +650,11 @@ class CameraManagerHelper(private val context: Context) {
                     }
                 }
             }
+            
+            glVideoProcessor.setDisplaySurface(previewSurface)
+            if (selectedLutFileName != null) {
+                glVideoProcessor.setLut(selectedLutFileName)
+            }
 
             // Chọn một size YUV hợp lệ thay vì hardcode 320x240
             val yuvSizes = map?.getOutputSizes(ImageFormat.YUV_420_888) ?: emptyArray()
@@ -683,62 +693,63 @@ class CameraManagerHelper(private val context: Context) {
                 }
             }, backgroundHandler)
 
-            val surfaces = mutableListOf(previewSurface)
+            val surfaces = mutableListOf<Surface>()
             if (!isRecording) {
                 if (onImageAvailable != null) {
                     imageReader?.surface?.let { surfaces.add(it) }
                 }
                 pictureReader?.surface?.let { surfaces.add(it) }
             }
-            mediaRecorder?.surface?.let { surfaces.add(it) }
-
-            cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession) {
-                    if (cameraDevice == null) return
-                    captureSession = session
-                    try {
-                        val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
-                        captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
-                        captureRequestBuilder?.addTarget(previewSurface)
-                        
-                        if (!isRecording) {
-                            if (onImageAvailable != null) {
-                                imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
-                            }
-                        }
-
-                        mediaRecorder?.surface?.let { captureRequestBuilder?.addTarget(it) }
-
-                        captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                        captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                        
-                        updateCropRegion(captureRequestBuilder!!, settings.aspectRatio)
-                        applyCurrentSettings()
-                        
-                        val request = captureRequestBuilder?.build()
-                        if (request != null) {
-                            session.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
-                                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                                    val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
-                                    val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-                                    if (iso != null) currentIso = iso
-                                    if (shutter != null) currentShutter = shutter
+            
+            glVideoProcessor.onInputSurfaceReady = { inputSurface ->
+                surfaces.add(inputSurface)
+                
+                cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
+                    override fun onConfigured(session: CameraCaptureSession) {
+                        if (cameraDevice == null) return
+                        captureSession = session
+                        try {
+                            val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
+                            captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
+                            captureRequestBuilder?.addTarget(inputSurface)
+                            
+                            if (!isRecording) {
+                                if (onImageAvailable != null) {
+                                    imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
                                 }
-                            }, backgroundHandler)
+                            }
+    
+                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                            
+                            updateCropRegion(captureRequestBuilder!!, settings.aspectRatio)
+                            applyCurrentSettings()
+                            
+                            val request = captureRequestBuilder?.build()
+                            if (request != null) {
+                                session.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
+                                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                                        val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
+                                        val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+                                        if (iso != null) currentIso = iso
+                                        if (shutter != null) currentShutter = shutter
+                                    }
+                                }, backgroundHandler)
+                            }
+    
+                            if (isRecording) {
+                                mediaRecorder?.start()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("CameraHelper", "Error starting preview", e)
                         }
-
-                        if (isRecording) {
-                            mediaRecorder?.start()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("CameraHelper", "Error starting preview", e)
                     }
-                }
-
-                override fun onConfigureFailed(session: CameraCaptureSession) {
-                    Log.e("CameraHelper", "Configuration failed")
-                }
-            }, backgroundHandler)
+    
+                    override fun onConfigureFailed(session: CameraCaptureSession) {
+                        Log.e("CameraHelper", "Configuration failed")
+                    }
+                }, backgroundHandler)
+            }
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error creating session", e)
         }
@@ -802,6 +813,7 @@ class CameraManagerHelper(private val context: Context) {
             pfd.close()
 
             isRecording = true
+            glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
             openCamera(textureView)
             return true
             
@@ -824,6 +836,7 @@ class CameraManagerHelper(private val context: Context) {
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error stopping recorder", e)
         } finally {
+            glVideoProcessor.setRecordSurface(null)
             isRecording = false
             mediaRecorder = null
             
