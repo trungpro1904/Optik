@@ -82,7 +82,15 @@ class GlVideoProcessor(private val context: Context) {
 
     fun setLut(assetFileName: String?) {
         handler?.post {
-            displaySurface?.makeCurrent()
+            if (displaySurface != null) {
+                displaySurface!!.makeCurrent()
+            } else if (recordSurface != null) {
+                recordSurface!!.makeCurrent()
+            } else {
+                // If neither surface is ready, ignore for now.
+                // It will be applied again when setDisplaySurface is called.
+                return@post
+            }
             lutFilter?.loadLut(assetFileName)
         }
     }
