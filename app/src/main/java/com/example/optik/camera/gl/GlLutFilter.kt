@@ -23,6 +23,7 @@ class GlLutFilter(private val context: Context) {
     private var lutTexLoc = 0
 
     private var lutTextureId = -1
+    private var dummyTextureId = -1
 
     companion object {
         private const val VERTEX_SHADER = """
@@ -140,6 +141,17 @@ class GlLutFilter(private val context: Context) {
         val hasLutLoc = GLES20.glGetUniformLocation(programId, "uHasLut")
         GLES20.glUniform1i(hasLutLoc, 0)
         GLES20.glUseProgram(0)
+
+        // Khởi tạo dummy texture để tránh lỗi đen màn hình (texture completeness) trên GPU Adreno khi không có LUT
+        val dummyTex = IntArray(1)
+        GLES20.glGenTextures(1, dummyTex, 0)
+        dummyTextureId = dummyTex[0]
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, dummyTextureId)
+        val dummyBuffer = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
+        dummyBuffer.put(byteArrayOf(0, 0, 0, 0))
+        dummyBuffer.position(0)
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 1, 1, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, dummyBuffer)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
     }
 
     fun loadLut(assetFileName: String?) {
@@ -191,6 +203,9 @@ class GlLutFilter(private val context: Context) {
             GLES20.glUniform1i(lutTexLoc, 1)
             GLES20.glUniform1i(hasLutLoc, 1)
         } else {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, dummyTextureId)
+            GLES20.glUniform1i(lutTexLoc, 1)
             GLES20.glUniform1i(hasLutLoc, 0)
         }
 
@@ -220,6 +235,10 @@ class GlLutFilter(private val context: Context) {
         if (lutTextureId != -1) {
             GLES20.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
             lutTextureId = -1
+        }
+        if (dummyTextureId != -1) {
+            GLES20.glDeleteTextures(1, intArrayOf(dummyTextureId), 0)
+            dummyTextureId = -1
         }
     }
 
