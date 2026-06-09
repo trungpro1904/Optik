@@ -32,9 +32,10 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
         }
         val version = IntArray(2)
         if (!EGL14.eglInitialize(eglDisplay, version, 0, version, 1)) {
-            eglDisplay = EGL14.EGL_NO_DISPLAY
+            this.eglDisplay = EGL14.EGL_NO_DISPLAY
             throw RuntimeException("unable to initialize EGL14")
         }
+        this.eglDisplay = eglDisplay
 
         val eglContextToShare = sharedContext ?: EGL14.EGL_NO_CONTEXT
 
@@ -74,8 +75,6 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
             this.eglConfig = config
             this.eglContext = context
         }
-
-        this.eglDisplay = eglDisplay
     }
 
     private fun getConfig(flags: Int, version: Int): EGLConfig? {
