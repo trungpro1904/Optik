@@ -27,6 +27,7 @@ class GlVideoProcessor(private val context: Context) {
 
     private val transformMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
+    var videoOrientation: Int = 0
 
     // Listener để báo cho CameraManagerHelper biết Surface đã sẵn sàng
     var onInputSurfaceReady: ((Surface) -> Unit)? = null
@@ -154,7 +155,11 @@ class GlVideoProcessor(private val context: Context) {
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-            lutFilter?.draw(cameraTextureId, mvpMatrix, transformMatrix)
+            val recordMvpMatrix = FloatArray(16)
+            android.opengl.Matrix.setIdentityM(recordMvpMatrix, 0)
+            android.opengl.Matrix.rotateM(recordMvpMatrix, 0, videoOrientation.toFloat(), 0f, 0f, 1f)
+
+            lutFilter?.draw(cameraTextureId, recordMvpMatrix, transformMatrix)
             
             it.swapBuffers()
         }
