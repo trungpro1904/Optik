@@ -811,6 +811,7 @@ class CameraManagerHelper(private val context: Context) {
                     (sensorOrientation + currentDeviceOrientation + 360) % 360
                 }
                 setOrientationHint(videoOrientation)
+                glVideoProcessor.videoOrientation = videoOrientation
                 prepare()
             }
             pfd.close()
