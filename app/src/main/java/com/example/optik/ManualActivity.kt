@@ -305,14 +305,15 @@ class ManualActivity : AppCompatActivity() {
                 
                 var hasValidTrackedFace = false
                 
-                if (isTouchFocusLocked && touchLockedFaceCenter != null) {
+                val center = touchLockedFaceCenter
+                if (isTouchFocusLocked && center != null) {
                     var minDistance = Float.MAX_VALUE
                     for (face in result.faceLandmarks()) {
                         var cX = 0f; var cY = 0f
                         for (l in face) { cX += l.x(); cY += l.y() }
                         cX = (cX / face.size) * binding.overlayView.width
                         cY = (cY / face.size) * binding.overlayView.height
-                        val dist = Math.hypot((cX - touchLockedFaceCenter!!.x).toDouble(), (cY - touchLockedFaceCenter!!.y).toDouble()).toFloat()
+                        val dist = Math.hypot((cX - center.x).toDouble(), (cY - center.y).toDouble()).toFloat()
                         if (dist < minDistance) {
                             minDistance = dist
                             bestFace = face
@@ -555,7 +556,7 @@ class ManualActivity : AppCompatActivity() {
                 mainHandler.postDelayed(this, 40) // 25fps
             }
         }
-        mainHandler.post(infoBarUpdateRunnable!!)
+        infoBarUpdateRunnable?.let { mainHandler.post(it) }
     }
 
     private fun stopInfoBarUpdates() {

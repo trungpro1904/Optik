@@ -120,8 +120,9 @@ class CameraManagerHelper(private val context: Context) {
     }
 
     fun startBackgroundThread() {
-        backgroundThread = HandlerThread("CameraBackground").also { it.start() }
-        backgroundHandler = Handler(backgroundThread!!.looper)
+        val thread = HandlerThread("CameraBackground").also { it.start() }
+        backgroundThread = thread
+        backgroundHandler = Handler(thread.looper)
         glVideoProcessor.start()
     }
 
@@ -448,8 +449,8 @@ class CameraManagerHelper(private val context: Context) {
         }
         
         try {
-            if (currentCameraId != null) {
-                val chars = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            currentCameraId?.let { cameraId ->
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
                 val fpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
                 
                 var bestRange: android.util.Range<Int>? = null
@@ -516,7 +517,8 @@ class CameraManagerHelper(private val context: Context) {
         var normalizedY = y / viewHeight
         
         try {
-            val characteristics = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            val cameraId = currentCameraId ?: return
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
             if (sensorOrientation == 90) {
                 val temp = normalizedX
@@ -730,7 +732,7 @@ class CameraManagerHelper(private val context: Context) {
                             captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                             captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
                             
-                            updateCropRegion(captureRequestBuilder!!, settings.aspectRatio)
+                            captureRequestBuilder?.let { builder -> updateCropRegion(builder, settings.aspectRatio) }
                             applyCurrentSettings()
                             
                             val request = captureRequestBuilder?.build()
@@ -809,7 +811,8 @@ class CameraManagerHelper(private val context: Context) {
                 setVideoEncoder(android.media.MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
                 
-                val chars = cameraManager.getCameraCharacteristics(currentCameraId!!)
+                val cameraId = currentCameraId ?: return false
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
                 val sensorOrientation = chars.get(android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
                 val videoOrientation = if (isFrontCamera) {
                     (sensorOrientation - currentDeviceOrientation + 360) % 360
@@ -911,7 +914,8 @@ class CameraManagerHelper(private val context: Context) {
             
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, captureRequestBuilder?.get(CaptureRequest.CONTROL_AF_MODE))
             
-            val characteristics = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            val cameraId = currentCameraId ?: return
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             
             // Tính toán hướng JPEG dựa trên góc xoay thực tế của máy (currentDeviceOrientation)
