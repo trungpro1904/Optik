@@ -39,7 +39,10 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
         val eglContextToShare = sharedContext ?: EGL14.EGL_NO_CONTEXT
 
         if (flags and FLAG_TRY_GLES3 != 0) {
-            val config = getConfig(flags, 3)
+            var config = getConfig(flags, 3)
+            if (config == null && (flags and FLAG_RECORDABLE != 0)) {
+                config = getConfig(flags and FLAG_RECORDABLE.inv(), 3)
+            }
             if (config != null) {
                 val attrib3_list = intArrayOf(
                     EGL14.EGL_CONTEXT_CLIENT_VERSION, 3,
@@ -54,7 +57,14 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
         }
         
         if (this.eglContext === EGL14.EGL_NO_CONTEXT) {
-            val config = getConfig(flags, 2) ?: throw RuntimeException("Unable to find a suitable EGLConfig")
+            var config = getConfig(flags, 2)
+            if (config == null && (flags and FLAG_RECORDABLE != 0)) {
+                config = getConfig(flags and FLAG_RECORDABLE.inv(), 2)
+            }
+            if (config == null) {
+                throw RuntimeException("Unable to find a suitable EGLConfig")
+            }
+            
             val attrib2_list = intArrayOf(
                 EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
                 EGL14.EGL_NONE
