@@ -164,9 +164,13 @@ class GlLutFilter(private val context: Context) {
             return
         }
 
+        val options = BitmapFactory.Options().apply {
+            inScaled = false
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
         val bitmap = try {
             context.assets.open(assetFileName).use { inputStream ->
-                BitmapFactory.decodeStream(inputStream)
+                BitmapFactory.decodeStream(inputStream, null, options)
             }
         } catch (e: Exception) {
             e.printStackTrace()
