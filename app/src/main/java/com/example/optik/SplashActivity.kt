@@ -20,7 +20,10 @@ class SplashActivity : AppCompatActivity() {
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION
     ).apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+            add(Manifest.permission.READ_MEDIA_IMAGES)
+            add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+        } else if (Build.VERSION.SDK_INT >= 33) { // Android 13
             add(Manifest.permission.READ_MEDIA_IMAGES)
         } else {
             add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -29,16 +32,24 @@ class SplashActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // No layout needed, transparent background or just a solid color is fine
-        
         checkPermissionsAndStart()
     }
 
     private fun checkPermissionsAndStart() {
-        // We only STRICTLY block on Camera permission for starting the app.
-        // Location and Media can be optional, but we request all.
         val permissionsToRequest = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            var isGranted = ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+            
+            // Xử lý quyền trên Android 14 (Nếu cho phép 1 phần hoặc toàn bộ thì đều tính là đã cấp)
+            if (Build.VERSION.SDK_INT >= 34) {
+                if (it == Manifest.permission.READ_MEDIA_IMAGES) {
+                    val partial = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+                    isGranted = isGranted || partial
+                } else if (it == Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) {
+                    val full = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+                    isGranted = isGranted || full
+                }
+            }
+            !isGranted
         }.toTypedArray()
 
         if (permissionsToRequest.isNotEmpty()) {
@@ -55,12 +66,10 @@ class SplashActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSIONS_REQUEST_CODE) {
-            // Check if Camera is granted
-            val cameraIndex = permissions.indexOf(Manifest.permission.CAMERA)
-            if (cameraIndex != -1 && grantResults[cameraIndex] == PackageManager.PERMISSION_GRANTED) {
+            // Kiểm tra trạng thái cấp quyền hiện tại bằng ContextCompat thay vì chỉ số mảng
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 proceedToApp()
             } else {
-                // Camera denied, can't use the app. Just finish.
                 finish()
             }
         }
@@ -70,9 +79,9 @@ class SplashActivity : AppCompatActivity() {
         val settings = SettingsManager.getInstance(this)
         
         val isManual = if (settings.startupMode == 0) {
-            false // Luôn dùng chế độ Basic
+            false
         } else {
-            settings.lastUsedMode == 1 // CĐ chụp trước
+            settings.lastUsedMode == 1
         }
         
         val intent = if (isManual) {

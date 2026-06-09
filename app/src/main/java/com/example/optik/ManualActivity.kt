@@ -226,8 +226,7 @@ class ManualActivity : AppCompatActivity() {
         val viewsToRotate = listOf(
             binding.btnMenu,
             binding.btnAlbum,
-            binding.bottomPanel.findViewById(R.id.btn_switch),
-            binding.bottomPanel.findViewById(R.id.tv_mp),
+            binding.bottomPanel.findViewById<View>(R.id.tv_mp),
             findViewById(R.id.focal_length),
             findViewById(R.id.btn_mode),
             findViewById(R.id.btn_disp),
@@ -306,14 +305,15 @@ class ManualActivity : AppCompatActivity() {
                 
                 var hasValidTrackedFace = false
                 
-                if (isTouchFocusLocked && touchLockedFaceCenter != null) {
+                val center = touchLockedFaceCenter
+                if (isTouchFocusLocked && center != null) {
                     var minDistance = Float.MAX_VALUE
                     for (face in result.faceLandmarks()) {
                         var cX = 0f; var cY = 0f
                         for (l in face) { cX += l.x(); cY += l.y() }
                         cX = (cX / face.size) * binding.overlayView.width
                         cY = (cY / face.size) * binding.overlayView.height
-                        val dist = Math.hypot((cX - touchLockedFaceCenter!!.x).toDouble(), (cY - touchLockedFaceCenter!!.y).toDouble()).toFloat()
+                        val dist = Math.hypot((cX - center.x).toDouble(), (cY - center.y).toDouble()).toFloat()
                         if (dist < minDistance) {
                             minDistance = dist
                             bestFace = face
@@ -541,9 +541,7 @@ class ManualActivity : AppCompatActivity() {
             runOnUiThread { 
                 maxCameraMp = sizes.maxOfOrNull { it.width * it.height / 1_000_000 } ?: 12
                 val btnRes = binding.tvMp
-                if (btnRes != null) {
-                    btnRes.text = "${listOf(48, 24, 12).firstOrNull { it <= maxCameraMp } ?: 12}mp"
-                }
+                btnRes?.text = SettingsManager.getInstance(this@ManualActivity).photoResolution.ifEmpty { "12mp" }
             } 
         }
 
@@ -558,7 +556,7 @@ class ManualActivity : AppCompatActivity() {
                 mainHandler.postDelayed(this, 40) // 25fps
             }
         }
-        mainHandler.post(infoBarUpdateRunnable!!)
+        infoBarUpdateRunnable?.let { mainHandler.post(it) }
     }
 
     private fun stopInfoBarUpdates() {
@@ -804,6 +802,7 @@ class ManualActivity : AppCompatActivity() {
         val clickListener = View.OnClickListener { v -> 
             if (v is android.widget.TextView) { 
                 tvMp.text = v.text
+                SettingsManager.getInstance(this).photoResolution = v.text.toString()
                 popup.dismiss() 
             } 
         }
