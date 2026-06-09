@@ -46,6 +46,14 @@ class GlLutFilter(private val context: Context) {
             uniform sampler2D sLutTex;
             uniform int uHasLut;
 
+            vec2 getTexPos(float g_int, float b_int, float r_float) {
+                float y_local = floor(g_int / 8.0);
+                float x_block = g_int - y_local * 8.0;
+                float x = x_block * 64.0 + r_float + 0.5;
+                float y = b_int * 8.0 + y_local + 0.5;
+                return vec2(x / 512.0, y / 512.0);
+            }
+
             void main() {
                 vec4 textureColor = texture2D(sCameraTex, vTextureCoord);
                 
@@ -54,32 +62,33 @@ class GlLutFilter(private val context: Context) {
                     return;
                 }
                 
-                // Tránh lỗi lấy mẫu tại viền
-                float blueColor = textureColor.b * 63.0;
+                float R = textureColor.r * 63.0;
+                float G = textureColor.g * 63.0;
+                float B = textureColor.b * 63.0;
                 
-                vec2 quad1;
-                quad1.y = floor(floor(blueColor) / 8.0);
-                quad1.x = floor(blueColor) - (quad1.y * 8.0);
+                float g0 = floor(G);
+                float g1 = min(g0 + 1.0, 63.0);
+                float b0 = floor(B);
+                float b1 = min(b0 + 1.0, 63.0);
                 
-                vec2 quad2;
-                quad2.y = floor(ceil(blueColor) / 8.0);
-                quad2.x = ceil(blueColor) - (quad2.y * 8.0);
+                float g_frac = fract(G);
+                float b_frac = fract(B);
                 
-                vec2 texPos1;
-                texPos1.x = (quad1.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
-                texPos1.y = (quad1.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
-                texPos1.y = 1.0 - texPos1.y;
+                vec2 pos00 = getTexPos(g0, b0, R);
+                vec2 pos10 = getTexPos(g1, b0, R);
+                vec2 pos01 = getTexPos(g0, b1, R);
+                vec2 pos11 = getTexPos(g1, b1, R);
                 
-                vec2 texPos2;
-                texPos2.x = (quad2.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
-                texPos2.y = (quad2.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
-                texPos2.y = 1.0 - texPos2.y;
+                vec4 c00 = texture2D(sLutTex, pos00);
+                vec4 c10 = texture2D(sLutTex, pos10);
+                vec4 c01 = texture2D(sLutTex, pos01);
+                vec4 c11 = texture2D(sLutTex, pos11);
                 
-                vec4 newColor1 = texture2D(sLutTex, texPos1);
-                vec4 newColor2 = texture2D(sLutTex, texPos2);
+                vec4 c0 = mix(c00, c10, g_frac);
+                vec4 c1 = mix(c01, c11, g_frac);
                 
-                vec4 newColor = mix(newColor1, newColor2, fract(blueColor));
-                gl_FragColor = mix(textureColor, vec4(newColor.rgb, textureColor.a), 1.0);
+                vec4 newColor = mix(c0, c1, b_frac);
+                gl_FragColor = vec4(newColor.rgb, textureColor.a);
             }
         """
 
