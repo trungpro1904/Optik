@@ -47,4 +47,16 @@ class WindowSurface(private val eglCore: EglCore, private val surface: Surface, 
     fun setPresentationTime(nsecs: Long) {
         eglCore.setPresentationTime(eglSurface, nsecs)
     }
+
+    fun getWidth(): Int {
+        val value = IntArray(1)
+        android.opengl.EGL14.eglQuerySurface(eglCore.eglDisplay, eglSurface, android.opengl.EGL14.EGL_WIDTH, value, 0)
+        return value[0]
+    }
+
+    fun getHeight(): Int {
+        val value = IntArray(1)
+        android.opengl.EGL14.eglQuerySurface(eglCore.eglDisplay, eglSurface, android.opengl.EGL14.EGL_HEIGHT, value, 0)
+        return value[0]
+    }
 }

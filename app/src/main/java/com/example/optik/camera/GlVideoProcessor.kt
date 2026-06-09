@@ -74,6 +74,12 @@ class GlVideoProcessor(private val context: Context) {
         }
     }
 
+    fun setDefaultBufferSize(width: Int, height: Int) {
+        handler?.post {
+            cameraSurfaceTexture?.setDefaultBufferSize(width, height)
+        }
+    }
+
     fun setLut(assetFileName: String?) {
         handler?.post {
             displaySurface?.makeCurrent()
@@ -128,7 +134,7 @@ class GlVideoProcessor(private val context: Context) {
         // Render ra Display
         displaySurface?.let {
             it.makeCurrent()
-            // Không set glViewport cứng, để SurfaceTexture tự bao quát kích thước view
+            GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
@@ -139,6 +145,7 @@ class GlVideoProcessor(private val context: Context) {
         // Render ra Record
         recordSurface?.let {
             it.makeCurrent()
+            GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 

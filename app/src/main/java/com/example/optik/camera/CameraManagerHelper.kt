@@ -639,6 +639,8 @@ class CameraManagerHelper(private val context: Context) {
             val texture = textureView.surfaceTexture ?: return
             texture.setDefaultBufferSize(optimalSize.width, optimalSize.height)
             val previewSurface = Surface(texture)
+            
+            glVideoProcessor.setDefaultBufferSize(optimalSize.width, optimalSize.height)
 
             if (textureView is com.example.optik.view.AutoFitTextureView) {
                 Handler(context.mainLooper).post {
