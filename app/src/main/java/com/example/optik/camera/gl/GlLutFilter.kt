@@ -40,7 +40,7 @@ class GlLutFilter(private val context: Context) {
         // Shader xử lý 3D LUT (Kích thước Hald CLUT 512x512, grid 8x8x8 = 512, mỗi cell 64x64)
         private const val FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
-            precision mediump float;
+            precision highp float;
             varying vec2 vTextureCoord;
             uniform samplerExternalOES sCameraTex;
             uniform sampler2D sLutTex;
