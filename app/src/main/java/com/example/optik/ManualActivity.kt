@@ -541,9 +541,7 @@ class ManualActivity : AppCompatActivity() {
             runOnUiThread { 
                 maxCameraMp = sizes.maxOfOrNull { it.width * it.height / 1_000_000 } ?: 12
                 val btnRes = binding.tvMp
-                if (btnRes != null) {
-                    btnRes.text = "${listOf(48, 24, 12).firstOrNull { it <= maxCameraMp } ?: 12}mp"
-                }
+                btnRes?.text = SettingsManager.getInstance(this@ManualActivity).photoResolution.ifEmpty { "12mp" }
             } 
         }
 
@@ -804,6 +802,7 @@ class ManualActivity : AppCompatActivity() {
         val clickListener = View.OnClickListener { v -> 
             if (v is android.widget.TextView) { 
                 tvMp.text = v.text
+                SettingsManager.getInstance(this).photoResolution = v.text.toString()
                 popup.dismiss() 
             } 
         }

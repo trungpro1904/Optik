@@ -230,17 +230,18 @@ class BasicActivity : AppCompatActivity() {
         binding.videoPhotoSelector.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
         val btnVideo = binding.btnVideoMode; val btnPhoto = binding.btnPhotoMode
         val btnFps = binding.topBar.findViewById<TextView>(R.id.btn_fps); val btnRes = binding.topBar.findViewById<TextView>(R.id.btn_resolution)
+        val settings = SettingsManager.getInstance(this)
         if (isVideo) {
             btnVideo.alpha = 1.0f; btnVideo.typeface = android.graphics.Typeface.DEFAULT_BOLD
             btnPhoto.alpha = 0.5f; btnPhoto.typeface = android.graphics.Typeface.DEFAULT
-            btnFps?.visibility = View.VISIBLE; btnRes?.text = "HD"
+            btnFps?.visibility = View.VISIBLE; btnRes?.text = settings.videoFormat.ifEmpty { "4K" }.replace("p", "")
             
             binding.shutterBg.setBackgroundResource(R.drawable.bg_shutter_video)
             binding.tvRec.visibility = View.VISIBLE
         } else {
             btnPhoto.alpha = 1.0f; btnPhoto.typeface = android.graphics.Typeface.DEFAULT_BOLD
             btnVideo.alpha = 0.5f; btnVideo.typeface = android.graphics.Typeface.DEFAULT
-            btnFps?.visibility = View.GONE; btnRes?.text = "12mp"
+            btnFps?.visibility = View.GONE; btnRes?.text = settings.photoResolution.ifEmpty { "12mp" }
             
             binding.shutterBg.setBackgroundResource(R.drawable.circle_white)
             binding.tvRec.visibility = View.GONE
@@ -410,7 +411,7 @@ class BasicActivity : AppCompatActivity() {
         
         binding.topBar.findViewById<TextView>(R.id.btn_ratio)?.setOnClickListener { showRatioPopup() }
         binding.topBar.findViewById<TextView>(R.id.btn_resolution)?.setOnClickListener { showResolutionPopup() }
-        updateAspectRatio("4:3")
+        updateAspectRatio(SettingsManager.getInstance(this).aspectRatio.ifEmpty { "4:3" })
 
         binding.topBar.findViewById<TextView>(R.id.btn_ev)?.setOnClickListener {
             if (binding.evSlider.visibility == View.VISIBLE) binding.evSlider.visibility = View.GONE
@@ -509,9 +510,9 @@ class BasicActivity : AppCompatActivity() {
             resHd?.visibility = if (videoConfigs.any { it.width == 1920 }) View.VISIBLE else View.GONE
             res720?.visibility = if (videoConfigs.any { it.width == 1280 }) View.VISIBLE else View.GONE
 
-            res4k?.setOnClickListener { btnRes.text = "4K"; updateFpsOptions(3840, 2160) }
-            resHd?.setOnClickListener { btnRes.text = "HD"; updateFpsOptions(1920, 1080) }
-            res720?.setOnClickListener { btnRes.text = "720"; updateFpsOptions(1280, 720) }
+            res4k?.setOnClickListener { btnRes.text = "4K"; SettingsManager.getInstance(this).videoFormat = "4K"; updateFpsOptions(3840, 2160) }
+            resHd?.setOnClickListener { btnRes.text = "HD"; SettingsManager.getInstance(this).videoFormat = "HD"; updateFpsOptions(1920, 1080) }
+            res720?.setOnClickListener { btnRes.text = "720"; SettingsManager.getInstance(this).videoFormat = "720p"; updateFpsOptions(1280, 720) }
             
             fps120?.setOnClickListener { btnFps.text = "120"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
             fps60?.setOnClickListener { btnFps.text = "60"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
@@ -520,7 +521,13 @@ class BasicActivity : AppCompatActivity() {
             val currentW = when(btnRes.text) { "4K" -> 3840; "HD" -> 1920; else -> 1280 }
             updateFpsOptions(currentW, if(currentW == 3840) 2160 else if(currentW == 1920) 1080 else 720)
         } else {
-            val clickListener = View.OnClickListener { v -> if (v is TextView) { btnRes.text = v.text; popup.dismiss() } }
+            val clickListener = View.OnClickListener { v -> 
+                if (v is TextView) { 
+                    btnRes.text = v.text; 
+                    SettingsManager.getInstance(this).photoResolution = v.text.toString()
+                    popup.dismiss() 
+                } 
+            }
             val v48 = popupView.findViewById<TextView>(R.id.res_48mp)
             val v24 = popupView.findViewById<TextView>(R.id.res_24mp)
             val v12 = popupView.findViewById<TextView>(R.id.res_12mp)
