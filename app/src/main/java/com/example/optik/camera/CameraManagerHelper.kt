@@ -249,12 +249,12 @@ class CameraManagerHelper(private val context: Context) {
                 lenses
             }
             
-            // Tính toán zoomRatio dựa trên ống kính 1x (Wide chính, thường ~24-26mm)
+            // Tính toán zoomRatio dựa trên tiêu cự 35mm của ống kính 1x (Wide chính, thường ~24-26mm)
             val standardLens = resultLenses.minByOrNull { Math.abs(it.focalLength35mm - 24) } ?: resultLenses[0]
-            val standardFocalLength = if (standardLens.focalLength > 0) standardLens.focalLength else 1.0f
+            val standardFocalLength35mm = if (standardLens.focalLength35mm > 0) standardLens.focalLength35mm.toFloat() else 24f
             
             for (lens in resultLenses) {
-                lens.zoomRatio = if (lens.focalLength > 0) lens.focalLength / standardFocalLength else 1.0f
+                lens.zoomRatio = if (lens.focalLength35mm > 0) lens.focalLength35mm.toFloat() / standardFocalLength35mm else 1.0f
                 // Round to 1 decimal place
                 lens.zoomRatio = Math.round(lens.zoomRatio * 10) / 10f
             }
