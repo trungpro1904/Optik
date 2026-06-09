@@ -545,14 +545,19 @@ class CameraManagerHelper(private val context: Context) {
         builder.set(CaptureRequest.CONTROL_AF_REGIONS, meteringArray)
         builder.set(CaptureRequest.CONTROL_AE_REGIONS, meteringArray)
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
-        builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+        builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
         
         isFocusLocked = true
         isFocusing = true
         lastFocusRect = android.graphics.RectF(x - 20f, y - 20f, x + 20f, y + 20f)
         
         try {
+            captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
+
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+            
             captureSession?.capture(builder.build(), object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     val afState = result.get(CaptureResult.CONTROL_AF_STATE)
@@ -563,9 +568,7 @@ class CameraManagerHelper(private val context: Context) {
                     }
                 }
             }, backgroundHandler)
-            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
-            builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
-            captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
+
         } catch (e: Exception) {
             Log.e("CameraHelper", "Failed to focus at point", e)
             isFocusing = false
@@ -574,10 +577,13 @@ class CameraManagerHelper(private val context: Context) {
 
     fun cancelFocus() {
         val builder = captureRequestBuilder ?: return
+        val sensorRect = sensorArraySize ?: Rect(0, 0, 0, 0)
         
         builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
-        builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
-        builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+        
+        val defaultMeteringArray = arrayOf(MeteringRectangle(sensorRect, 0))
+        builder.set(CaptureRequest.CONTROL_AF_REGIONS, defaultMeteringArray)
+        builder.set(CaptureRequest.CONTROL_AE_REGIONS, defaultMeteringArray)
         
         try {
             captureSession?.capture(builder.build(), null, backgroundHandler)
