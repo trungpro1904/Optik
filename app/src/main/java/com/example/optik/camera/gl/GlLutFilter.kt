@@ -68,10 +68,12 @@ class GlLutFilter(private val context: Context) {
                 vec2 texPos1;
                 texPos1.x = (quad1.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
                 texPos1.y = (quad1.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
+                texPos1.y = 1.0 - texPos1.y;
                 
                 vec2 texPos2;
                 texPos2.x = (quad2.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
                 texPos2.y = (quad2.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
+                texPos2.y = 1.0 - texPos2.y;
                 
                 vec4 newColor1 = texture2D(sLutTex, texPos1);
                 vec4 newColor2 = texture2D(sLutTex, texPos2);

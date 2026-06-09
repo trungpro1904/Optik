@@ -75,9 +75,7 @@ class GlVideoProcessor(private val context: Context) {
     }
 
     fun setDefaultBufferSize(width: Int, height: Int) {
-        handler?.post {
-            cameraSurfaceTexture?.setDefaultBufferSize(width, height)
-        }
+        cameraSurfaceTexture?.setDefaultBufferSize(width, height)
     }
 
     fun setLut(assetFileName: String?) {
@@ -116,16 +114,23 @@ class GlVideoProcessor(private val context: Context) {
         // Báo về cho main thread
         onInputSurfaceReady?.invoke(inputSurface!!)
 
-        Matrix.setIdentityM(mvpMatrix, 0)
         // Camera sensor thường bị xoay hoặc lật, nhưng TransformMatrix từ SurfaceTexture đã lo việc xoay
-        // Tuy nhiên, có thể cần lật dọc (flip Y) do trục Y của OpenGL bị ngược với Android Canvas
-        Matrix.scaleM(mvpMatrix, 0, 1f, -1f, 1f)
+        Matrix.setIdentityM(mvpMatrix, 0)
         
         eglCore!!.releaseSurface(tempSurface)
     }
 
     private fun drawFrame() {
         val st = cameraSurfaceTexture ?: return
+        
+        if (displaySurface == null && recordSurface == null) return
+        
+        if (displaySurface != null) {
+            displaySurface!!.makeCurrent()
+        } else if (recordSurface != null) {
+            recordSurface!!.makeCurrent()
+        }
+        
         st.updateTexImage()
         st.getTransformMatrix(transformMatrix)
         
