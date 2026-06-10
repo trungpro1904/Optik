@@ -701,6 +701,65 @@ class BasicActivity : AppCompatActivity() {
         
         cameraHelper.onCamerasAvailable = { runOnUiThread { setupZoomControls(it) } }
         
+        cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
+            val exposureMs = exposureTimeNs / 1_000_000
+            setUiEnabled(false)
+            if (exposureMs > 200) {
+                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                countdown?.visibility = View.VISIBLE
+                countdown?.max = 100
+                countdown?.progress = 0
+                val animator = android.animation.ValueAnimator.ofInt(0, 100)
+                animator.duration = exposureMs
+                animator.addUpdateListener { anim -> countdown?.progress = anim.animatedValue as Int }
+                animator.start()
+            }
+        }
+        
+        cameraHelper.onCaptureProcessingStartedListener = {
+            val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+            countdown?.visibility = View.GONE
+            val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
+            shutterProgress?.visibility = View.VISIBLE
+        }
+        
+        cameraHelper.onCaptureFinishedListener = {
+            val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
+            shutterProgress?.visibility = View.GONE
+            setUiEnabled(true)
+        }
+    }
+
+    private fun setUiEnabled(isEnabled: Boolean) {
+        val alphaVal = if (isEnabled) 1.0f else 0.4f
+        val viewsToToggle = listOf(
+            binding.btnMenu,
+            binding.btnShutter,
+            binding.topBar.findViewById(R.id.btn_resolution),
+            binding.topBar.findViewById(R.id.btn_fps),
+            binding.topBar.findViewById(R.id.btn_ev),
+            binding.topBar.findViewById(R.id.btn_mode),
+            binding.topBar.findViewById(R.id.btn_ratio),
+            binding.bottomPanel.findViewById(R.id.btn_flash),
+            binding.bottomPanel.findViewById(R.id.btn_switch),
+            binding.btnAlbum,
+            binding.btnExpand,
+            binding.videoPhotoSelectorContainer
+        )
+        
+        viewsToToggle.forEach { view ->
+            view?.let {
+                it.isEnabled = isEnabled
+                it.alpha = alphaVal
+            }
+        }
+        
+        val lensContainer = binding.lensSelectorContainer
+        for (i in 0 until lensContainer.childCount) {
+            val child = lensContainer.getChildAt(i)
+            child.isEnabled = isEnabled
+            child.alpha = alphaVal
+        }
     }
 
     private fun updateRecordingUI() {

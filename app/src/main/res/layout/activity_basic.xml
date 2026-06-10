@@ -120,6 +120,17 @@
             
         <include layout="@layout/layout_focus_box" />
 
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/exposure_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:indicatorSize="120dp"
+            app:trackThickness="4dp"
+            app:indicatorColor="@color/white"
+            app:trackColor="#80000000" />
+
         <!-- thước dọc-->
         <com.example.optik.view.LevelIndicatorView
             android:id="@+id/level_pitch"
@@ -288,6 +299,17 @@
                 android:layout_height="72dp"
                 android:layout_gravity="center"
                 android:background="@drawable/circle_white" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/shutter_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:indeterminate="true"
+                app:indicatorSize="72dp"
+                app:trackThickness="4dp"
+                app:indicatorColor="@color/recording_red" />
 
             <TextView
                 android:id="@+id/tv_rec"

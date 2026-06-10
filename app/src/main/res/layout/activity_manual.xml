@@ -95,6 +95,17 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/exposure_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:indicatorSize="120dp"
+            app:trackThickness="4dp"
+            app:indicatorColor="@color/white"
+            app:trackColor="#80000000" />
+
         <include layout="@layout/layout_focus_box" />
 
         <!-- Lens Selection Panel (Moved to top) -->
@@ -350,16 +361,34 @@
                 android:textStyle="bold"/>
         </FrameLayout>
 
-        <!-- Shutter Button -->
-        <View
-            android:id="@+id/btn_shutter"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="@drawable/circle_white"
+        <!-- Shutter Button Container -->
+        <FrameLayout
+            android:id="@+id/btn_shutter_container"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"/>
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <View
+                android:id="@+id/btn_shutter"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:background="@drawable/circle_white" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/shutter_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:indeterminate="true"
+                app:indicatorSize="72dp"
+                app:trackThickness="4dp"
+                app:indicatorColor="@color/recording_red" />
+        </FrameLayout>
 
         <!-- MP Text -->
         <TextView

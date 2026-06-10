@@ -502,6 +502,13 @@ class CameraManagerHelper(private val context: Context) {
 
     var onFocusFinished: ((Boolean) -> Unit)? = null
     private var isFocusing = false
+    
+    // Capture Progress Callbacks
+    var onCaptureStartedListener: ((exposureTimeNs: Long) -> Unit)? = null
+    var onCaptureProcessingStartedListener: (() -> Unit)? = null
+    var onCaptureFinishedListener: (() -> Unit)? = null
+
+    // For level sensor or other usage if needed
 
     fun focusAtPoint(x: Float, y: Float, viewWidth: Int, viewHeight: Int, isManual: Boolean = false) {
         if (isFocusing && !isManual) return
@@ -700,6 +707,9 @@ class CameraManagerHelper(private val context: Context) {
                 if (image != null) {
                     saveImage(image)
                     image.close()
+                    Handler(context.mainLooper).post {
+                        onCaptureFinishedListener?.invoke()
+                    }
                 }
             }, backgroundHandler)
 
@@ -939,9 +949,19 @@ class CameraManagerHelper(private val context: Context) {
             }
             
             captureSession?.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber)
+                    Handler(context.mainLooper).post {
+                        onCaptureStartedListener?.invoke(currentShutter)
+                    }
+                }
+
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
                     Log.d("CameraHelper", "Capture completed")
+                    Handler(context.mainLooper).post {
+                        onCaptureProcessingStartedListener?.invoke()
+                    }
                 }
             }, backgroundHandler)
             
