@@ -325,17 +325,10 @@ class CameraManagerHelper(private val context: Context) {
             val avcCodecInfo = codecList.codecInfos.firstOrNull { it.isEncoder && it.supportedTypes.contains(android.media.MediaFormat.MIMETYPE_VIDEO_AVC) }
             val videoCaps = avcCodecInfo?.getCapabilitiesForType(android.media.MediaFormat.MIMETYPE_VIDEO_AVC)?.videoCapabilities
 
-            configMap?.getOutputSizes(android.media.MediaRecorder::class.java)?.forEach { size ->
-                val secondsPerFrame = configMap.getOutputMinFrameDuration(android.media.MediaRecorder::class.java, size)
+            configMap?.getOutputSizes(android.media.MediaCodec::class.java)?.forEach { size ->
+                val secondsPerFrame = configMap.getOutputMinFrameDuration(android.media.MediaCodec::class.java, size)
                 var sensorMaxFps = if (secondsPerFrame > 0) (1.0 / (secondsPerFrame / 1_000_000_000.0)).toInt() else 30
                 
-                try {
-                    if (configMap.highSpeedVideoSizes?.contains(size) == true) {
-                        val ranges = configMap.getHighSpeedVideoFpsRangesFor(size)
-                        ranges?.forEach { r -> if (r.upper > sensorMaxFps) sensorMaxFps = r.upper }
-                    }
-                } catch (e: Exception) {}
-
                 var encoderMaxFps = 30
                 try {
                     if (videoCaps != null && videoCaps.isSizeSupported(size.width, size.height)) {

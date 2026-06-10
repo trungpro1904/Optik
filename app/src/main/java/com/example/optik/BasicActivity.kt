@@ -235,7 +235,7 @@ class BasicActivity : AppCompatActivity() {
         if (isVideo) {
             btnVideo.alpha = 1.0f; btnVideo.typeface = android.graphics.Typeface.DEFAULT_BOLD
             btnPhoto.alpha = 0.5f; btnPhoto.typeface = android.graphics.Typeface.DEFAULT
-            btnFps?.visibility = View.VISIBLE; btnRes?.text = settings.videoFormat.ifEmpty { "4K" }.replace("p", "")
+            btnFps?.visibility = View.VISIBLE; btnFps?.text = settings.videoFps.ifEmpty { "60" }; btnRes?.text = settings.videoFormat.ifEmpty { "4K" }.replace("p", "")
             
             binding.shutterBg.setBackgroundResource(R.drawable.bg_shutter_video)
             binding.tvRec.visibility = View.VISIBLE
@@ -491,6 +491,7 @@ class BasicActivity : AppCompatActivity() {
                 if (currentFps > maxFps) {
                     val fallback = if (maxFps >= 60) 60 else 30
                     btnFps.text = fallback.toString()
+                    com.example.optik.settings.SettingsManager.getInstance(this@BasicActivity).videoFps = fallback.toString()
                 }
 
                 // Cập nhật màu nhấn cho nút (chữ cam sáng, không chọn thì làm mờ 0.6)
@@ -511,13 +512,13 @@ class BasicActivity : AppCompatActivity() {
             resHd?.visibility = if (videoConfigs.any { it.width == 1920 }) View.VISIBLE else View.GONE
             res720?.visibility = if (videoConfigs.any { it.width == 1280 }) View.VISIBLE else View.GONE
 
-            res4k?.setOnClickListener { btnRes.text = "4K"; SettingsManager.getInstance(this).videoFormat = "4K"; updateFpsOptions(3840, 2160) }
-            resHd?.setOnClickListener { btnRes.text = "HD"; SettingsManager.getInstance(this).videoFormat = "HD"; updateFpsOptions(1920, 1080) }
-            res720?.setOnClickListener { btnRes.text = "720"; SettingsManager.getInstance(this).videoFormat = "720p"; updateFpsOptions(1280, 720) }
+            res4k?.setOnClickListener { btnRes.text = "4K"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "4K"; updateFpsOptions(3840, 2160) }
+            resHd?.setOnClickListener { btnRes.text = "HD"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "HD"; updateFpsOptions(1920, 1080) }
+            res720?.setOnClickListener { btnRes.text = "720"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "720p"; updateFpsOptions(1280, 720) }
             
-            fps120?.setOnClickListener { btnFps.text = "120"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
-            fps60?.setOnClickListener { btnFps.text = "60"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
-            fps30?.setOnClickListener { btnFps.text = "30"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps120?.setOnClickListener { btnFps.text = "120"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "120"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps60?.setOnClickListener { btnFps.text = "60"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "60"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps30?.setOnClickListener { btnFps.text = "30"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "30"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
             
             val currentW = when(btnRes.text) { "4K" -> 3840; "HD" -> 1920; else -> 1280 }
             updateFpsOptions(currentW, if(currentW == 3840) 2160 else if(currentW == 1920) 1080 else 720)
