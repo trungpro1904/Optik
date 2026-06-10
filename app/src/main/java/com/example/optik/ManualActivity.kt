@@ -510,16 +510,20 @@ class ManualActivity : AppCompatActivity() {
         }
         
         cameraHelper.onCaptureProcessingStartedListener = {
-            val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
-            countdown?.visibility = View.GONE
-            val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-            shutterProgress?.visibility = View.VISIBLE
+            runOnUiThread {
+                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                countdown?.visibility = View.GONE
+                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
+                shutterProgress?.visibility = View.VISIBLE
+            }
         }
         
         cameraHelper.onCaptureFinishedListener = {
-            val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-            shutterProgress?.visibility = View.GONE
-            setUiEnabled(true)
+            runOnUiThread {
+                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
+                shutterProgress?.visibility = View.GONE
+                setUiEnabled(true)
+            }
         }
     }
     
