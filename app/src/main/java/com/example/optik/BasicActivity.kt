@@ -31,6 +31,7 @@ class BasicActivity : AppCompatActivity() {
     private var expandAnimator: ObjectAnimator? = null
     private var levelSensorHelper: com.example.optik.camera.LevelSensorHelper? = null
     private var isRecording = false
+    private var imagesSavingCount = 0
     private var videoConfigs: List<CameraManagerHelper.VideoConfig> = emptyList()
     private var isFlashOn = false
     private var isTouchFocusLocked = false
@@ -319,6 +320,11 @@ class BasicActivity : AppCompatActivity() {
 
         binding.btnMenu.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnAlbum.setOnClickListener {
+            if (imagesSavingCount > 0) {
+                val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                albumProgress?.visibility = View.VISIBLE
+                return@setOnClickListener
+            }
             val uri = cameraHelper.getLatestMediaUri()
             if (uri != null) {
                 val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "image/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -704,12 +710,10 @@ class BasicActivity : AppCompatActivity() {
         
         cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
             runOnUiThread {
-                setUiEnabled(false)
-                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-                shutterProgress?.visibility = View.VISIBLE
-                
+                imagesSavingCount++
                 val exposureMs = exposureTimeNs / 1_000_000
                 if (exposureMs > 200) {
+                    setUiEnabled(false)
                     val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
                     countdown?.visibility = View.VISIBLE
                     countdown?.max = 100
@@ -724,8 +728,11 @@ class BasicActivity : AppCompatActivity() {
         
         cameraHelper.onCaptureFinishedListener = {
             runOnUiThread {
-                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-                shutterProgress?.visibility = View.GONE
+                if (imagesSavingCount > 0) imagesSavingCount--
+                if (imagesSavingCount == 0) {
+                    val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                    albumProgress?.visibility = View.GONE
+                }
                 val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
                 countdown?.visibility = View.GONE
                 setUiEnabled(true)

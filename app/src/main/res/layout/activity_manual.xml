@@ -359,6 +359,16 @@
                 android:textColor="@color/black"
                 android:textSize="14sp"
                 android:textStyle="bold"/>
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/album_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:indeterminate="true"
+                app:indicatorSize="32dp"
+                app:trackThickness="3dp"
+                app:indicatorColor="@color/accent_orange" />
         </FrameLayout>
 
         <!-- Shutter Button Container -->

@@ -196,6 +196,7 @@ class ManualActivity : AppCompatActivity() {
     private var isTrackingFace = false
     private var latestObjects: List<com.google.mlkit.vision.objects.DetectedObject> = emptyList()
     private var maxCameraMp = 12
+    private var imagesSavingCount = 0
     
     private val mainHandler = Handler(Looper.getMainLooper())
     private var infoBarUpdateRunnable: Runnable? = null
@@ -496,12 +497,10 @@ class ManualActivity : AppCompatActivity() {
         
         cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
             runOnUiThread {
-                setUiEnabled(false)
-                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-                shutterProgress?.visibility = View.VISIBLE
-                
+                imagesSavingCount++
                 val exposureMs = exposureTimeNs / 1_000_000
                 if (exposureMs > 200) {
+                    setUiEnabled(false)
                     val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
                     countdown?.visibility = View.VISIBLE
                     countdown?.max = 100
@@ -516,8 +515,11 @@ class ManualActivity : AppCompatActivity() {
         
         cameraHelper.onCaptureFinishedListener = {
             runOnUiThread {
-                val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
-                shutterProgress?.visibility = View.GONE
+                if (imagesSavingCount > 0) imagesSavingCount--
+                if (imagesSavingCount == 0) {
+                    val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                    albumProgress?.visibility = View.GONE
+                }
                 val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
                 countdown?.visibility = View.GONE
                 setUiEnabled(true)
@@ -716,31 +718,16 @@ class ManualActivity : AppCompatActivity() {
         }
 
         binding.btnAlbum.setOnClickListener {
-            val collection = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
-            val selection = "${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
-            val selectionArgs = arrayOf("%Pictures/Optik%")
-            val sortOrder = "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
-            
-            var latestUri: android.net.Uri? = null
-            contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
-                    val id = cursor.getLong(idColumn)
-                    latestUri = android.content.ContentUris.withAppendedId(collection, id)
-                }
+            if (imagesSavingCount > 0) {
+                val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                albumProgress?.visibility = View.VISIBLE
+                return@setOnClickListener
             }
-            
-            if (latestUri != null) {
-                val intent = Intent(Intent.ACTION_VIEW)
-                intent.setDataAndType(latestUri, "image/*")
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val uri = cameraHelper.getLatestMediaUri()
+            if (uri != null) {
+                val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "image/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 startActivity(intent)
-            } else {
-                val intent = Intent(Intent.ACTION_PICK)
-                intent.type = "image/*"
-                startActivity(intent)
-            }
+            } else { startActivity(Intent(Intent.ACTION_PICK).apply { type = "image/*" }) }
         }
 
         // Mode switch wheel - nhấn vào chữ "M" để chuyển chế độ
