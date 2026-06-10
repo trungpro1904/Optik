@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tải Ứng Dụng (APK)</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --bg-color: #f4f4f9;
+            --text-main: #333;
+            --text-muted: #666;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 2.5rem 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .icon {
+            width: 64px;
+            height: 64px;
+            background-color: #e0f0ff;
+            color: var(--primary-color);
+            border-radius: 50%;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .icon svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        h1 {
+            margin: 0 0 0.5rem;
+            font-size: 1.5rem;
+        }
+
+        p {
+            color: var(--text-muted);
+            margin: 0 0 2rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 14px 28px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 123, 255, 0.2);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .download-btn:hover:not(.disabled) {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 123, 255, 0.3);
+        }
+
+        .download-btn.disabled {
+            background-color: #ccc;
+            box-shadow: none;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .info-section {
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+        }
+
+        .version {
+            color: var(--text-main);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .status {
+            color: var(--text-muted);
+        }
+
+        .status.error {
+            color: #dc3545;
+        }
+
+        .status.success {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+    </div>
+    <h1>Tải</h1>
+    <p>Nhấn vào nút bên dưới để tải về file cài đặt APK mới nhất từ GitHub.</p>
+    
+    <a href="#" id="download-btn" class="download-btn disabled">Đang tải thông tin...</a>
+    
+    <div class="info-section">
+        <span id="version-info" class="version"></span>
+        <div id="status" class="status">Đang lấy dữ liệu từ máy chủ...</div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // CẤU HÌNH GITHUB REPOSITORY CỦA BẠN TẠI ĐÂY
+    // ==========================================
+    const GITHUB_OWNER = 'trungpro1904'; // Ví dụ: 'microsoft'
+    const GITHUB_REPO = 'Optik';  // Ví dụ: 'vscode'
+
+    async function fetchLatestRelease() {
+        const statusEl = document.getElementById('status');
+        const btnEl = document.getElementById('download-btn');
+        const versionEl = document.getElementById('version-info');
+
+        try {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`);
+            
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error('Không tìm thấy repository hoặc chưa có bản release nào.');
+                }
+                throw new Error('Lỗi kết nối đến GitHub API.');
+            }
+            
+            const data = await response.json();
+            
+            // Tìm file có đuôi .apk trong danh sách assets
+            const apkAsset = data.assets.find(asset => asset.name.toLowerCase().endsWith('.apk'));
+            
+            if (apkAsset) {
+                // Cập nhật nút tải xuống
+                btnEl.href = apkAsset.browser_download_url;
+                btnEl.textContent = 'Tải Xuống APK';
+                btnEl.classList.remove('disabled');
+                
+                // Hiển thị thông tin phiên bản
+                const sizeMB = (apkAsset.size / (1024 * 1024)).toFixed(2);
+                versionEl.textContent = `Phiên bản: ${data.tag_name} (${sizeMB} MB)`;
+                
+                statusEl.textContent = `Ngày phát hành: ${new Date(data.published_at).toLocaleDateString('vi-VN')}`;
+                statusEl.className = 'status success';
+            } else {
+                statusEl.textContent = 'Không tìm thấy file APK nào trong bản release mới nhất.';
+                statusEl.className = 'status error';
+                btnEl.textContent = 'Không có file tải';
+            }
+        } catch (error) {
+            console.error('Lỗi khi fetch release:', error);
+            statusEl.textContent = error.message;
+            statusEl.className = 'status error';
+            btnEl.textContent = 'Lỗi';
+        }
+    }
+
+    // Kiểm tra xem đã cấu hình tên chưa
+    if (GITHUB_OWNER === 'YOUR_GITHUB_USERNAME' || GITHUB_REPO === 'YOUR_REPOSITORY_NAME') {
+        document.getElementById('status').textContent = 'Vui lòng cấu hình GITHUB_OWNER và GITHUB_REPO trong mã nguồn HTML.';
+        document.getElementById('status').className = 'status error';
+        document.getElementById('download-btn').textContent = 'Chưa cấu hình';
+    } else {
+        // Thực thi hàm lấy thông tin khi trang web được tải
+        fetchLatestRelease();
+    }
+</script>
+
+</body>
+</html>
