@@ -495,26 +495,22 @@ class ManualActivity : AppCompatActivity() {
         }
         
         cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
-            val exposureMs = exposureTimeNs / 1_000_000
-            setUiEnabled(false)
-            if (exposureMs > 200) {
-                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
-                countdown?.visibility = View.VISIBLE
-                countdown?.max = 100
-                countdown?.progress = 0
-                val animator = android.animation.ValueAnimator.ofInt(0, 100)
-                animator.duration = exposureMs
-                animator.addUpdateListener { anim -> countdown?.progress = anim.animatedValue as Int }
-                animator.start()
-            }
-        }
-        
-        cameraHelper.onCaptureProcessingStartedListener = {
             runOnUiThread {
-                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
-                countdown?.visibility = View.GONE
+                setUiEnabled(false)
                 val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
                 shutterProgress?.visibility = View.VISIBLE
+                
+                val exposureMs = exposureTimeNs / 1_000_000
+                if (exposureMs > 200) {
+                    val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                    countdown?.visibility = View.VISIBLE
+                    countdown?.max = 100
+                    countdown?.progress = 0
+                    val animator = android.animation.ValueAnimator.ofInt(0, 100)
+                    animator.duration = exposureMs
+                    animator.addUpdateListener { anim -> countdown?.progress = anim.animatedValue as Int }
+                    animator.start()
+                }
             }
         }
         
@@ -522,6 +518,8 @@ class ManualActivity : AppCompatActivity() {
             runOnUiThread {
                 val shutterProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.shutter_progress)
                 shutterProgress?.visibility = View.GONE
+                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                countdown?.visibility = View.GONE
                 setUiEnabled(true)
             }
         }
