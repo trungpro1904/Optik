@@ -8,6 +8,7 @@
     android:id="@+id/lut_container"
     android:background="#A0A0A0">
 
+
     <TextView
         android:id="@+id/text_lut_name"
         android:layout_width="wrap_content"
@@ -15,5 +16,5 @@
         android:text="LUT 1"
         android:textColor="@color/black"
         android:textStyle="bold"
-        android:textSize="16sp"/>
+        android:textSize="14sp"/>
 </LinearLayout>

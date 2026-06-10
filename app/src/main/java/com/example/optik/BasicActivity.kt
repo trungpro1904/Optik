@@ -31,6 +31,7 @@ class BasicActivity : AppCompatActivity() {
     private var expandAnimator: ObjectAnimator? = null
     private var levelSensorHelper: com.example.optik.camera.LevelSensorHelper? = null
     private var isRecording = false
+    private var imagesSavingCount = 0
     private var videoConfigs: List<CameraManagerHelper.VideoConfig> = emptyList()
     private var isFlashOn = false
     private var isTouchFocusLocked = false
@@ -92,14 +93,15 @@ class BasicActivity : AppCompatActivity() {
                 
                 var hasValidTrackedFace = false
                 
-                if (isTouchFocusLocked && touchLockedFaceCenter != null) {
+                val center = touchLockedFaceCenter
+                if (isTouchFocusLocked && center != null) {
                     var minDistance = Float.MAX_VALUE
                     for (face in result.faceLandmarks()) {
                         var cX = 0f; var cY = 0f
                         for (l in face) { cX += l.x(); cY += l.y() }
                         cX = (cX / face.size) * binding.overlayView.width
                         cY = (cY / face.size) * binding.overlayView.height
-                        val dist = Math.hypot((cX - touchLockedFaceCenter!!.x).toDouble(), (cY - touchLockedFaceCenter!!.y).toDouble()).toFloat()
+                        val dist = Math.hypot((cX - center.x).toDouble(), (cY - center.y).toDouble()).toFloat()
                         if (dist < minDistance) {
                             minDistance = dist
                             bestFace = face
@@ -230,17 +232,18 @@ class BasicActivity : AppCompatActivity() {
         binding.videoPhotoSelector.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
         val btnVideo = binding.btnVideoMode; val btnPhoto = binding.btnPhotoMode
         val btnFps = binding.topBar.findViewById<TextView>(R.id.btn_fps); val btnRes = binding.topBar.findViewById<TextView>(R.id.btn_resolution)
+        val settings = SettingsManager.getInstance(this)
         if (isVideo) {
             btnVideo.alpha = 1.0f; btnVideo.typeface = android.graphics.Typeface.DEFAULT_BOLD
             btnPhoto.alpha = 0.5f; btnPhoto.typeface = android.graphics.Typeface.DEFAULT
-            btnFps?.visibility = View.VISIBLE; btnRes?.text = "HD"
+            btnFps?.visibility = View.VISIBLE; btnFps?.text = settings.videoFps.ifEmpty { "60" }; btnRes?.text = settings.videoFormat.ifEmpty { "4K" }.replace("p", "")
             
             binding.shutterBg.setBackgroundResource(R.drawable.bg_shutter_video)
             binding.tvRec.visibility = View.VISIBLE
         } else {
             btnPhoto.alpha = 1.0f; btnPhoto.typeface = android.graphics.Typeface.DEFAULT_BOLD
             btnVideo.alpha = 0.5f; btnVideo.typeface = android.graphics.Typeface.DEFAULT
-            btnFps?.visibility = View.GONE; btnRes?.text = "12mp"
+            btnFps?.visibility = View.GONE; btnRes?.text = settings.photoResolution.ifEmpty { "12mp" }
             
             binding.shutterBg.setBackgroundResource(R.drawable.circle_white)
             binding.tvRec.visibility = View.GONE
@@ -317,6 +320,11 @@ class BasicActivity : AppCompatActivity() {
 
         binding.btnMenu.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnAlbum.setOnClickListener {
+            if (imagesSavingCount > 0) {
+                val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                albumProgress?.visibility = View.VISIBLE
+                return@setOnClickListener
+            }
             val uri = cameraHelper.getLatestMediaUri()
             if (uri != null) {
                 val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "image/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -410,7 +418,7 @@ class BasicActivity : AppCompatActivity() {
         
         binding.topBar.findViewById<TextView>(R.id.btn_ratio)?.setOnClickListener { showRatioPopup() }
         binding.topBar.findViewById<TextView>(R.id.btn_resolution)?.setOnClickListener { showResolutionPopup() }
-        updateAspectRatio("4:3")
+        updateAspectRatio(SettingsManager.getInstance(this).aspectRatio.ifEmpty { "4:3" })
 
         binding.topBar.findViewById<TextView>(R.id.btn_ev)?.setOnClickListener {
             if (binding.evSlider.visibility == View.VISIBLE) binding.evSlider.visibility = View.GONE
@@ -489,6 +497,7 @@ class BasicActivity : AppCompatActivity() {
                 if (currentFps > maxFps) {
                     val fallback = if (maxFps >= 60) 60 else 30
                     btnFps.text = fallback.toString()
+                    com.example.optik.settings.SettingsManager.getInstance(this@BasicActivity).videoFps = fallback.toString()
                 }
 
                 // Cập nhật màu nhấn cho nút (chữ cam sáng, không chọn thì làm mờ 0.6)
@@ -509,18 +518,24 @@ class BasicActivity : AppCompatActivity() {
             resHd?.visibility = if (videoConfigs.any { it.width == 1920 }) View.VISIBLE else View.GONE
             res720?.visibility = if (videoConfigs.any { it.width == 1280 }) View.VISIBLE else View.GONE
 
-            res4k?.setOnClickListener { btnRes.text = "4K"; updateFpsOptions(3840, 2160) }
-            resHd?.setOnClickListener { btnRes.text = "HD"; updateFpsOptions(1920, 1080) }
-            res720?.setOnClickListener { btnRes.text = "720"; updateFpsOptions(1280, 720) }
+            res4k?.setOnClickListener { btnRes.text = "4K"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "4K"; updateFpsOptions(3840, 2160) }
+            resHd?.setOnClickListener { btnRes.text = "HD"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "HD"; updateFpsOptions(1920, 1080) }
+            res720?.setOnClickListener { btnRes.text = "720"; com.example.optik.settings.SettingsManager.getInstance(this).videoFormat = "720p"; updateFpsOptions(1280, 720) }
             
-            fps120?.setOnClickListener { btnFps.text = "120"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
-            fps60?.setOnClickListener { btnFps.text = "60"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
-            fps30?.setOnClickListener { btnFps.text = "30"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps120?.setOnClickListener { btnFps.text = "120"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "120"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps60?.setOnClickListener { btnFps.text = "60"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "60"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
+            fps30?.setOnClickListener { btnFps.text = "30"; com.example.optik.settings.SettingsManager.getInstance(this).videoFps = "30"; updateFpsOptions(if (btnRes.text == "4K") 3840 else if (btnRes.text == "HD") 1920 else 1280, if (btnRes.text == "4K") 2160 else if (btnRes.text == "HD") 1080 else 720) }
             
             val currentW = when(btnRes.text) { "4K" -> 3840; "HD" -> 1920; else -> 1280 }
             updateFpsOptions(currentW, if(currentW == 3840) 2160 else if(currentW == 1920) 1080 else 720)
         } else {
-            val clickListener = View.OnClickListener { v -> if (v is TextView) { btnRes.text = v.text; popup.dismiss() } }
+            val clickListener = View.OnClickListener { v -> 
+                if (v is TextView) { 
+                    btnRes.text = v.text; 
+                    SettingsManager.getInstance(this).photoResolution = v.text.toString()
+                    popup.dismiss() 
+                } 
+            }
             val v48 = popupView.findViewById<TextView>(R.id.res_48mp)
             val v24 = popupView.findViewById<TextView>(R.id.res_24mp)
             val v12 = popupView.findViewById<TextView>(R.id.res_12mp)
@@ -693,6 +708,68 @@ class BasicActivity : AppCompatActivity() {
         
         cameraHelper.onCamerasAvailable = { runOnUiThread { setupZoomControls(it) } }
         
+        cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
+            runOnUiThread {
+                imagesSavingCount++
+                val exposureMs = exposureTimeNs / 1_000_000
+                if (exposureMs > 200) {
+                    setUiEnabled(false)
+                    val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                    countdown?.visibility = View.VISIBLE
+                    countdown?.max = 100
+                    countdown?.progress = 0
+                    val animator = android.animation.ValueAnimator.ofInt(0, 100)
+                    animator.duration = exposureMs
+                    animator.addUpdateListener { anim -> countdown?.progress = anim.animatedValue as Int }
+                    animator.start()
+                }
+            }
+        }
+        
+        cameraHelper.onCaptureFinishedListener = {
+            runOnUiThread {
+                if (imagesSavingCount > 0) imagesSavingCount--
+                if (imagesSavingCount == 0) {
+                    val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                    albumProgress?.visibility = View.GONE
+                }
+                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                countdown?.visibility = View.GONE
+                setUiEnabled(true)
+            }
+        }
+    }
+
+    private fun setUiEnabled(isEnabled: Boolean) {
+        val alphaVal = if (isEnabled) 1.0f else 0.4f
+        val viewsToToggle = listOf(
+            binding.btnMenu,
+            binding.btnShutter,
+            binding.topBar.findViewById(R.id.btn_resolution),
+            binding.topBar.findViewById(R.id.btn_fps),
+            binding.topBar.findViewById(R.id.btn_ev),
+            binding.topBar.findViewById(R.id.btn_mode),
+            binding.topBar.findViewById(R.id.btn_ratio),
+            binding.bottomPanel.findViewById(R.id.btn_flash),
+            binding.bottomPanel.findViewById(R.id.btn_switch),
+            binding.btnAlbum,
+            binding.btnExpand,
+            binding.videoPhotoSelectorContainer
+        )
+        
+        viewsToToggle.forEach { view ->
+            view?.let {
+                it.isEnabled = isEnabled
+                it.alpha = alphaVal
+            }
+        }
+        
+        val lensContainer = binding.lensSelectorContainer
+        for (i in 0 until lensContainer.childCount) {
+            val child = lensContainer.getChildAt(i)
+            child.isEnabled = isEnabled
+            child.alpha = alphaVal
+        }
     }
 
     private fun updateRecordingUI() {

@@ -43,6 +43,8 @@ class CameraManagerHelper(private val context: Context) {
     private var captureSession: CameraCaptureSession? = null
     private var captureRequestBuilder: CaptureRequest.Builder? = null
     
+    private val glVideoProcessor = GlVideoProcessor(context)
+    
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
@@ -114,14 +116,18 @@ class CameraManagerHelper(private val context: Context) {
 
     fun setSelectedLut(fileName: String?) {
         selectedLutFileName = fileName
+        glVideoProcessor.setLut(fileName)
     }
 
     fun startBackgroundThread() {
-        backgroundThread = HandlerThread("CameraBackground").also { it.start() }
-        backgroundHandler = Handler(backgroundThread!!.looper)
+        val thread = HandlerThread("CameraBackground").also { it.start() }
+        backgroundThread = thread
+        backgroundHandler = Handler(thread.looper)
+        glVideoProcessor.start()
     }
 
     fun stopBackgroundThread() {
+        glVideoProcessor.stop()
         backgroundThread?.quitSafely()
         try {
             backgroundThread?.join()
@@ -249,12 +255,12 @@ class CameraManagerHelper(private val context: Context) {
                 lenses
             }
             
-            // Tính toán zoomRatio dựa trên ống kính 1x (Wide chính, thường ~24-26mm)
+            // Tính toán zoomRatio dựa trên tiêu cự 35mm của ống kính 1x (Wide chính, thường ~24-26mm)
             val standardLens = resultLenses.minByOrNull { Math.abs(it.focalLength35mm - 24) } ?: resultLenses[0]
-            val standardFocalLength = if (standardLens.focalLength > 0) standardLens.focalLength else 1.0f
+            val standardFocalLength35mm = if (standardLens.focalLength35mm > 0) standardLens.focalLength35mm.toFloat() else 24f
             
             for (lens in resultLenses) {
-                lens.zoomRatio = if (lens.focalLength > 0) lens.focalLength / standardFocalLength else 1.0f
+                lens.zoomRatio = if (lens.focalLength35mm > 0) lens.focalLength35mm.toFloat() / standardFocalLength35mm else 1.0f
                 // Round to 1 decimal place
                 lens.zoomRatio = Math.round(lens.zoomRatio * 10) / 10f
             }
@@ -313,18 +319,32 @@ class CameraManagerHelper(private val context: Context) {
 
             val videoConfigs = mutableListOf<VideoConfig>()
             val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            
+            // Lấy thông tin năng lực của bộ mã hóa Video H.264 (AVC)
+            val codecList = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+            val avcCodecInfo = codecList.codecInfos.firstOrNull { it.isEncoder && it.supportedTypes.contains(android.media.MediaFormat.MIMETYPE_VIDEO_AVC) }
+            val videoCaps = avcCodecInfo?.getCapabilitiesForType(android.media.MediaFormat.MIMETYPE_VIDEO_AVC)?.videoCapabilities
+
             configMap?.getOutputSizes(android.media.MediaRecorder::class.java)?.forEach { size ->
-                val secondsPerFrame = configMap.getOutputMinFrameDuration(android.media.MediaRecorder::class.java, size)
-                var maxFps = if (secondsPerFrame > 0) (1.0 / (secondsPerFrame / 1_000_000_000.0)).toInt() else 30
+                val duration1 = configMap.getOutputMinFrameDuration(android.media.MediaRecorder::class.java, size)
+                val duration2 = configMap.getOutputMinFrameDuration(android.graphics.SurfaceTexture::class.java, size)
+                val secondsPerFrame = Math.max(duration1, duration2)
+                var sensorMaxFps = if (secondsPerFrame > 0) (1.0 / (secondsPerFrame / 1_000_000_000.0)).toInt() else 30
                 
+                var encoderMaxFps = 30
                 try {
-                    if (configMap.highSpeedVideoSizes?.contains(size) == true) {
-                        val ranges = configMap.getHighSpeedVideoFpsRangesFor(size)
-                        ranges?.forEach { r -> if (r.upper > maxFps) maxFps = r.upper }
+                    if (videoCaps != null && videoCaps.isSizeSupported(size.width, size.height)) {
+                        val supportedFrameRates = videoCaps.getSupportedFrameRatesFor(size.width, size.height)
+                        encoderMaxFps = supportedFrameRates.upper.toInt()
                     }
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    encoderMaxFps = 30
+                }
                 
-                videoConfigs.add(VideoConfig(size.width, size.height, maxFps))
+                // Lấy giá trị nhỏ nhất giữa khả năng của cảm biến và giới hạn của bộ mã hóa
+                val realMaxFps = Math.min(sensorMaxFps, encoderMaxFps)
+                
+                videoConfigs.add(VideoConfig(size.width, size.height, realMaxFps))
             }
 
             onCameraInfoAvailable?.invoke(CameraInfo(
@@ -424,8 +444,8 @@ class CameraManagerHelper(private val context: Context) {
         }
         
         try {
-            if (currentCameraId != null) {
-                val chars = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            currentCameraId?.let { cameraId ->
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
                 val fpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
                 
                 var bestRange: android.util.Range<Int>? = null
@@ -477,6 +497,13 @@ class CameraManagerHelper(private val context: Context) {
 
     var onFocusFinished: ((Boolean) -> Unit)? = null
     private var isFocusing = false
+    
+    // Capture Progress Callbacks
+    var onCaptureStartedListener: ((exposureTimeNs: Long) -> Unit)? = null
+    var onCaptureProcessingStartedListener: (() -> Unit)? = null
+    var onCaptureFinishedListener: (() -> Unit)? = null
+
+    // For level sensor or other usage if needed
 
     fun focusAtPoint(x: Float, y: Float, viewWidth: Int, viewHeight: Int, isManual: Boolean = false) {
         if (isFocusing && !isManual) return
@@ -492,7 +519,8 @@ class CameraManagerHelper(private val context: Context) {
         var normalizedY = y / viewHeight
         
         try {
-            val characteristics = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            val cameraId = currentCameraId ?: return
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
             if (sensorOrientation == 90) {
                 val temp = normalizedX
@@ -521,14 +549,19 @@ class CameraManagerHelper(private val context: Context) {
         builder.set(CaptureRequest.CONTROL_AF_REGIONS, meteringArray)
         builder.set(CaptureRequest.CONTROL_AE_REGIONS, meteringArray)
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
-        builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+        builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+        builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
         
         isFocusLocked = true
         isFocusing = true
         lastFocusRect = android.graphics.RectF(x - 20f, y - 20f, x + 20f, y + 20f)
         
         try {
+            captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
+
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+            
             captureSession?.capture(builder.build(), object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     val afState = result.get(CaptureResult.CONTROL_AF_STATE)
@@ -539,9 +572,7 @@ class CameraManagerHelper(private val context: Context) {
                     }
                 }
             }, backgroundHandler)
-            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
-            builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
-            captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
+
         } catch (e: Exception) {
             Log.e("CameraHelper", "Failed to focus at point", e)
             isFocusing = false
@@ -550,10 +581,13 @@ class CameraManagerHelper(private val context: Context) {
 
     fun cancelFocus() {
         val builder = captureRequestBuilder ?: return
+        val sensorRect = sensorArraySize ?: Rect(0, 0, 0, 0)
         
         builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
-        builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
-        builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+        
+        val defaultMeteringArray = arrayOf(MeteringRectangle(sensorRect, 0))
+        builder.set(CaptureRequest.CONTROL_AF_REGIONS, defaultMeteringArray)
+        builder.set(CaptureRequest.CONTROL_AE_REGIONS, defaultMeteringArray)
         
         try {
             captureSession?.capture(builder.build(), null, backgroundHandler)
@@ -615,6 +649,8 @@ class CameraManagerHelper(private val context: Context) {
             val texture = textureView.surfaceTexture ?: return
             texture.setDefaultBufferSize(optimalSize.width, optimalSize.height)
             val previewSurface = Surface(texture)
+            
+            glVideoProcessor.setDefaultBufferSize(optimalSize.width, optimalSize.height)
 
             if (textureView is com.example.optik.view.AutoFitTextureView) {
                 Handler(context.mainLooper).post {
@@ -625,6 +661,11 @@ class CameraManagerHelper(private val context: Context) {
                         textureView.setAspectRatio(optimalSize.width, optimalSize.height)
                     }
                 }
+            }
+            
+            glVideoProcessor.setDisplaySurface(previewSurface)
+            if (selectedLutFileName != null) {
+                glVideoProcessor.setLut(selectedLutFileName)
             }
 
             // Chọn một size YUV hợp lệ thay vì hardcode 320x240
@@ -661,65 +702,70 @@ class CameraManagerHelper(private val context: Context) {
                 if (image != null) {
                     saveImage(image)
                     image.close()
+                    Handler(context.mainLooper).post {
+                        onCaptureFinishedListener?.invoke()
+                    }
                 }
             }, backgroundHandler)
 
-            val surfaces = mutableListOf(previewSurface)
+            val surfaces = mutableListOf<Surface>()
             if (!isRecording) {
                 if (onImageAvailable != null) {
                     imageReader?.surface?.let { surfaces.add(it) }
                 }
                 pictureReader?.surface?.let { surfaces.add(it) }
             }
-            mediaRecorder?.surface?.let { surfaces.add(it) }
-
-            cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession) {
-                    if (cameraDevice == null) return
-                    captureSession = session
-                    try {
-                        val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
-                        captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
-                        captureRequestBuilder?.addTarget(previewSurface)
-                        
-                        if (!isRecording) {
-                            if (onImageAvailable != null) {
-                                imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
-                            }
-                        }
-
-                        mediaRecorder?.surface?.let { captureRequestBuilder?.addTarget(it) }
-
-                        captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                        captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                        
-                        updateCropRegion(captureRequestBuilder!!, settings.aspectRatio)
-                        applyCurrentSettings()
-                        
-                        val request = captureRequestBuilder?.build()
-                        if (request != null) {
-                            session.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
-                                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                                    val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
-                                    val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-                                    if (iso != null) currentIso = iso
-                                    if (shutter != null) currentShutter = shutter
+            
+            glVideoProcessor.onInputSurfaceReady = { inputSurface ->
+                surfaces.add(inputSurface)
+                
+                cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
+                    override fun onConfigured(session: CameraCaptureSession) {
+                        if (cameraDevice == null) return
+                        captureSession = session
+                        try {
+                            val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
+                            captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
+                            captureRequestBuilder?.addTarget(inputSurface)
+                            
+                            if (!isRecording) {
+                                if (onImageAvailable != null) {
+                                    imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
                                 }
-                            }, backgroundHandler)
+                            }
+    
+                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                            
+                            captureRequestBuilder?.let { builder -> updateCropRegion(builder, settings.aspectRatio) }
+                            applyCurrentSettings()
+                            
+                            val request = captureRequestBuilder?.build()
+                            if (request != null) {
+                                session.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
+                                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                                        val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
+                                        val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+                                        if (iso != null) currentIso = iso
+                                        if (shutter != null) currentShutter = shutter
+                                    }
+                                }, backgroundHandler)
+                            }
+    
+                            if (isRecording) {
+                                mediaRecorder?.start()
+                                glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("CameraHelper", "Error starting preview", e)
                         }
-
-                        if (isRecording) {
-                            mediaRecorder?.start()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("CameraHelper", "Error starting preview", e)
                     }
-                }
-
-                override fun onConfigureFailed(session: CameraCaptureSession) {
-                    Log.e("CameraHelper", "Configuration failed")
-                }
-            }, backgroundHandler)
+    
+                    override fun onConfigureFailed(session: CameraCaptureSession) {
+                        Log.e("CameraHelper", "Configuration failed")
+                    }
+                }, backgroundHandler)
+            }
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error creating session", e)
         }
@@ -770,7 +816,8 @@ class CameraManagerHelper(private val context: Context) {
                 setVideoEncoder(android.media.MediaRecorder.VideoEncoder.H264)
                 setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
                 
-                val chars = cameraManager.getCameraCharacteristics(currentCameraId!!)
+                val cameraId = currentCameraId ?: return false
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
                 val sensorOrientation = chars.get(android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
                 val videoOrientation = if (isFrontCamera) {
                     (sensorOrientation - currentDeviceOrientation + 360) % 360
@@ -778,6 +825,7 @@ class CameraManagerHelper(private val context: Context) {
                     (sensorOrientation + currentDeviceOrientation + 360) % 360
                 }
                 setOrientationHint(videoOrientation)
+                glVideoProcessor.videoOrientation = videoOrientation
                 prepare()
             }
             pfd.close()
@@ -805,6 +853,7 @@ class CameraManagerHelper(private val context: Context) {
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error stopping recorder", e)
         } finally {
+            glVideoProcessor.setRecordSurface(null)
             isRecording = false
             mediaRecorder = null
             
@@ -870,7 +919,8 @@ class CameraManagerHelper(private val context: Context) {
             
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, captureRequestBuilder?.get(CaptureRequest.CONTROL_AF_MODE))
             
-            val characteristics = cameraManager.getCameraCharacteristics(currentCameraId!!)
+            val cameraId = currentCameraId ?: return
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
             val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
             
             // Tính toán hướng JPEG dựa trên góc xoay thực tế của máy (currentDeviceOrientation)
@@ -894,9 +944,19 @@ class CameraManagerHelper(private val context: Context) {
             }
             
             captureSession?.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber)
+                    Handler(context.mainLooper).post {
+                        onCaptureStartedListener?.invoke(currentShutter)
+                    }
+                }
+
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
                     Log.d("CameraHelper", "Capture completed")
+                    Handler(context.mainLooper).post {
+                        onCaptureProcessingStartedListener?.invoke()
+                    }
                 }
             }, backgroundHandler)
             

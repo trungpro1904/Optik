@@ -168,7 +168,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun fetchResolutions() {
         cameraHelper.onResolutionsAvailable = { sizes ->
             runOnUiThread {
-                availableResolutions = sizes.map { "${(it.width * it.height / 1_000_000)}mp" }
+                availableResolutions = sizes
+                    .filter { (it.width * it.height) >= 11_500_000 }
+                    .map { "${Math.round(it.width * it.height / 1_000_000f)}mp" }
                     .distinct()
                     .sortedByDescending { it.replace("mp", "").toInt() }
                 
@@ -178,6 +180,7 @@ class SettingsActivity : AppCompatActivity() {
                 updateRowValue(binding.rowPhotoResolution.root, settings.photoResolution)
             }
         }
+        cameraHelper.fetchCameras()
         cameraHelper.fetchResolutions()
     }
 }

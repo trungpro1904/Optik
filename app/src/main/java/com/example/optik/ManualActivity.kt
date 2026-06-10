@@ -196,6 +196,7 @@ class ManualActivity : AppCompatActivity() {
     private var isTrackingFace = false
     private var latestObjects: List<com.google.mlkit.vision.objects.DetectedObject> = emptyList()
     private var maxCameraMp = 12
+    private var imagesSavingCount = 0
     
     private val mainHandler = Handler(Looper.getMainLooper())
     private var infoBarUpdateRunnable: Runnable? = null
@@ -226,8 +227,7 @@ class ManualActivity : AppCompatActivity() {
         val viewsToRotate = listOf(
             binding.btnMenu,
             binding.btnAlbum,
-            binding.bottomPanel.findViewById(R.id.btn_switch),
-            binding.bottomPanel.findViewById(R.id.tv_mp),
+            binding.bottomPanel.findViewById<View>(R.id.tv_mp),
             findViewById(R.id.focal_length),
             findViewById(R.id.btn_mode),
             findViewById(R.id.btn_disp),
@@ -306,14 +306,15 @@ class ManualActivity : AppCompatActivity() {
                 
                 var hasValidTrackedFace = false
                 
-                if (isTouchFocusLocked && touchLockedFaceCenter != null) {
+                val center = touchLockedFaceCenter
+                if (isTouchFocusLocked && center != null) {
                     var minDistance = Float.MAX_VALUE
                     for (face in result.faceLandmarks()) {
                         var cX = 0f; var cY = 0f
                         for (l in face) { cX += l.x(); cY += l.y() }
                         cX = (cX / face.size) * binding.overlayView.width
                         cY = (cY / face.size) * binding.overlayView.height
-                        val dist = Math.hypot((cX - touchLockedFaceCenter!!.x).toDouble(), (cY - touchLockedFaceCenter!!.y).toDouble()).toFloat()
+                        val dist = Math.hypot((cX - center.x).toDouble(), (cY - center.y).toDouble()).toFloat()
                         if (dist < minDistance) {
                             minDistance = dist
                             bestFace = face
@@ -493,6 +494,68 @@ class ManualActivity : AppCompatActivity() {
             binding.overlayView.hideAiBox = false
             cameraHelper.cancelFocus()
         }
+        
+        cameraHelper.onCaptureStartedListener = { exposureTimeNs ->
+            runOnUiThread {
+                imagesSavingCount++
+                val exposureMs = exposureTimeNs / 1_000_000
+                if (exposureMs > 200) {
+                    setUiEnabled(false)
+                    val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                    countdown?.visibility = View.VISIBLE
+                    countdown?.max = 100
+                    countdown?.progress = 0
+                    val animator = android.animation.ValueAnimator.ofInt(0, 100)
+                    animator.duration = exposureMs
+                    animator.addUpdateListener { anim -> countdown?.progress = anim.animatedValue as Int }
+                    animator.start()
+                }
+            }
+        }
+        
+        cameraHelper.onCaptureFinishedListener = {
+            runOnUiThread {
+                if (imagesSavingCount > 0) imagesSavingCount--
+                if (imagesSavingCount == 0) {
+                    val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                    albumProgress?.visibility = View.GONE
+                }
+                val countdown = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.exposure_countdown)
+                countdown?.visibility = View.GONE
+                setUiEnabled(true)
+            }
+        }
+    }
+    
+    private fun setUiEnabled(isEnabled: Boolean) {
+        val alphaVal = if (isEnabled) 1.0f else 0.4f
+        val viewsToToggle = listOf(
+            binding.btnMenu,
+            binding.btnShutter,
+            binding.bottomPanel.findViewById(R.id.btn_flash),
+            binding.bottomPanel.findViewById(R.id.btn_switch),
+            binding.btnAlbum,
+            binding.btnExpand,
+            binding.quickSettings?.btnIsoQuick,
+            binding.quickSettings?.btnShutterQuick,
+            binding.quickSettings?.btnEvQuick,
+            binding.quickSettings?.btnFocusQuick,
+            binding.quickSettings?.btnWbQuick
+        )
+        
+        viewsToToggle.forEach { view ->
+            view?.let {
+                it.isEnabled = isEnabled
+                it.alpha = alphaVal
+            }
+        }
+        
+        val lensContainer = binding.lensContainer
+        for (i in 0 until lensContainer.childCount) {
+            val child = lensContainer.getChildAt(i)
+            child.isEnabled = isEnabled
+            child.alpha = alphaVal
+        }
     }
 
     private fun updateAspectRatio(r: String) {
@@ -541,9 +604,7 @@ class ManualActivity : AppCompatActivity() {
             runOnUiThread { 
                 maxCameraMp = sizes.maxOfOrNull { it.width * it.height / 1_000_000 } ?: 12
                 val btnRes = binding.tvMp
-                if (btnRes != null) {
-                    btnRes.text = "${listOf(48, 24, 12).firstOrNull { it <= maxCameraMp } ?: 12}mp"
-                }
+                btnRes?.text = SettingsManager.getInstance(this@ManualActivity).photoResolution.ifEmpty { "12mp" }
             } 
         }
 
@@ -558,7 +619,7 @@ class ManualActivity : AppCompatActivity() {
                 mainHandler.postDelayed(this, 40) // 25fps
             }
         }
-        mainHandler.post(infoBarUpdateRunnable!!)
+        infoBarUpdateRunnable?.let { mainHandler.post(it) }
     }
 
     private fun stopInfoBarUpdates() {
@@ -657,31 +718,16 @@ class ManualActivity : AppCompatActivity() {
         }
 
         binding.btnAlbum.setOnClickListener {
-            val collection = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
-            val selection = "${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
-            val selectionArgs = arrayOf("%Pictures/Optik%")
-            val sortOrder = "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
-            
-            var latestUri: android.net.Uri? = null
-            contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
-                    val id = cursor.getLong(idColumn)
-                    latestUri = android.content.ContentUris.withAppendedId(collection, id)
-                }
+            if (imagesSavingCount > 0) {
+                val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
+                albumProgress?.visibility = View.VISIBLE
+                return@setOnClickListener
             }
-            
-            if (latestUri != null) {
-                val intent = Intent(Intent.ACTION_VIEW)
-                intent.setDataAndType(latestUri, "image/*")
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val uri = cameraHelper.getLatestMediaUri()
+            if (uri != null) {
+                val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "image/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 startActivity(intent)
-            } else {
-                val intent = Intent(Intent.ACTION_PICK)
-                intent.type = "image/*"
-                startActivity(intent)
-            }
+            } else { startActivity(Intent(Intent.ACTION_PICK).apply { type = "image/*" }) }
         }
 
         // Mode switch wheel - nhấn vào chữ "M" để chuyển chế độ
@@ -804,6 +850,7 @@ class ManualActivity : AppCompatActivity() {
         val clickListener = View.OnClickListener { v -> 
             if (v is android.widget.TextView) { 
                 tvMp.text = v.text
+                SettingsManager.getInstance(this).photoResolution = v.text.toString()
                 popup.dismiss() 
             } 
         }

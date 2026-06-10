@@ -99,6 +99,8 @@
         android:id="@+id/preview_container"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constrainedWidth="true"
+        app:layout_constrainedHeight="true"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/top_bar"
@@ -118,6 +120,17 @@
             
         <include layout="@layout/layout_focus_box" />
 
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/exposure_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            app:indicatorSize="120dp"
+            app:trackThickness="4dp"
+            app:indicatorColor="@color/white"
+            app:trackColor="#80000000" />
+
         <!-- thước dọc-->
         <com.example.optik.view.LevelIndicatorView
             android:id="@+id/level_pitch"
@@ -134,12 +147,8 @@
             android:id="@+id/level_roll"
             android:layout_width="250dp"
             android:layout_height="60dp"
-            android:layout_gravity="center"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintVertical_bias="0.75"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="50dp"
             android:visibility="gone" />
 
         <!-- Preview Blur Overlay -->
@@ -270,6 +279,16 @@
                 android:textColor="@color/black"
                 android:textSize="14sp"
                 android:textStyle="bold"/>
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/album_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:indeterminate="true"
+                app:indicatorSize="32dp"
+                app:trackThickness="3dp"
+                app:indicatorColor="@color/accent_orange" />
         </FrameLayout>
 
         <!-- Shutter Button Container -->
@@ -290,6 +309,17 @@
                 android:layout_height="72dp"
                 android:layout_gravity="center"
                 android:background="@drawable/circle_white" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/shutter_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                android:indeterminate="true"
+                app:indicatorSize="72dp"
+                app:trackThickness="4dp"
+                app:indicatorColor="@color/recording_red" />
 
             <TextView
                 android:id="@+id/tv_rec"
