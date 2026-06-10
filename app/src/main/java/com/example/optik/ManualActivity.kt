@@ -863,7 +863,10 @@ class ManualActivity : AppCompatActivity() {
         v12?.visibility = View.VISIBLE
         
         listOfNotNull(v48, v24, v12).forEach { it.setOnClickListener(clickListener) }
-        popup.showAsDropDown(tvMp)
+        
+        popupView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popupHeight = popupView.measuredHeight
+        popup.showAsDropDown(tvMp, 0, -tvMp.height - popupHeight)
     }
 
     private fun updateRatioPanelUI() {
