@@ -1,5 +1,5 @@
 package com.example.optik.camera
-
+//thước
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -28,19 +28,19 @@ class LevelSensorHelper(context: Context, private val onAnglesUpdated: (pitch: F
                 val y = it.values[1]
                 val z = it.values[2]
 
-                // Calculate Roll (left/right tilt)
+                // Calculate Roll (thước ngang)
                 val rollRaw = Math.toDegrees(atan2(-x.toDouble(), y.toDouble())).toFloat()
                 
-                // Calculate Pitch (forward/backward tilt)
+                // Calculate Pitch (thước dọc)
                 val pitchRaw = Math.toDegrees(atan2(-z.toDouble(), Math.sqrt((x*x + y*y).toDouble()))).toFloat()
                 
-                // Snap roll to nearest 90 degrees so it works in both portrait and landscape
+                // snap thước ngang về gốc 90 độ để quay ngang dọc vẫn hoạt động đúng
                 var rollSnapped = (rollRaw + 45f) / 90f
                 if (rollSnapped < 0) rollSnapped -= 1f // Fix flooring for negative numbers
                 val nearest90 = rollSnapped.toInt() * 90f
                 val roll = rollRaw - nearest90
                 
-                // Pitch is 0 when the device is perfectly upright
+                // thước dọc bằng 0 khi thiết bị ở phương thẳng đứng
                 val pitch = pitchRaw
 
                 onAnglesUpdated(pitch, roll)

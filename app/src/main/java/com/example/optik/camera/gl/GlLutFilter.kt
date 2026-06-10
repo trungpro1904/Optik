@@ -38,7 +38,7 @@ class GlLutFilter(private val context: Context) {
             }
         """
 
-        // Shader xử lý 3D LUT (Kích thước Hald CLUT 512x512, grid 8x8x8 = 512, mỗi cell 64x64)
+        // Shader xử lý 3D LUT bằng manual trilinear interpolation để khắc phục lỗi posterization/banding trên mobile GPU (precision issues)
         private const val FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;
@@ -47,10 +47,10 @@ class GlLutFilter(private val context: Context) {
             uniform sampler2D sLutTex;
             uniform int uHasLut;
 
-            vec2 getTexPos(float g_int, float b_int, float r_float) {
+            vec2 getTexPos(float g_int, float b_int, float r_int) {
                 float y_local = floor(g_int / 8.0);
-                float x_block = g_int - y_local * 8.0;
-                float x = x_block * 64.0 + r_float + 0.5;
+                float x_block = mod(g_int, 8.0);
+                float x = x_block * 64.0 + r_int + 0.5;
                 float y = b_int * 8.0 + y_local + 0.5;
                 return vec2(x / 512.0, y / 512.0);
             }
@@ -67,23 +67,41 @@ class GlLutFilter(private val context: Context) {
                 float G = textureColor.g * 63.0;
                 float B = textureColor.b * 63.0;
                 
+                float r0 = floor(R);
+                float r1 = min(r0 + 1.0, 63.0);
                 float g0 = floor(G);
                 float g1 = min(g0 + 1.0, 63.0);
                 float b0 = floor(B);
                 float b1 = min(b0 + 1.0, 63.0);
                 
+                float r_frac = fract(R);
                 float g_frac = fract(G);
                 float b_frac = fract(B);
                 
-                vec2 pos00 = getTexPos(g0, b0, R);
-                vec2 pos10 = getTexPos(g1, b0, R);
-                vec2 pos01 = getTexPos(g0, b1, R);
-                vec2 pos11 = getTexPos(g1, b1, R);
+                vec2 p000 = getTexPos(g0, b0, r0);
+                vec2 p100 = getTexPos(g0, b0, r1);
+                vec2 p010 = getTexPos(g1, b0, r0);
+                vec2 p110 = getTexPos(g1, b0, r1);
                 
-                vec4 c00 = texture2D(sLutTex, pos00);
-                vec4 c10 = texture2D(sLutTex, pos10);
-                vec4 c01 = texture2D(sLutTex, pos01);
-                vec4 c11 = texture2D(sLutTex, pos11);
+                vec2 p001 = getTexPos(g0, b1, r0);
+                vec2 p101 = getTexPos(g0, b1, r1);
+                vec2 p011 = getTexPos(g1, b1, r0);
+                vec2 p111 = getTexPos(g1, b1, r1);
+                
+                vec4 c000 = texture2D(sLutTex, p000);
+                vec4 c100 = texture2D(sLutTex, p100);
+                vec4 c010 = texture2D(sLutTex, p010);
+                vec4 c110 = texture2D(sLutTex, p110);
+                
+                vec4 c001 = texture2D(sLutTex, p001);
+                vec4 c101 = texture2D(sLutTex, p101);
+                vec4 c011 = texture2D(sLutTex, p011);
+                vec4 c111 = texture2D(sLutTex, p111);
+                
+                vec4 c00 = mix(c000, c100, r_frac);
+                vec4 c10 = mix(c010, c110, r_frac);
+                vec4 c01 = mix(c001, c101, r_frac);
+                vec4 c11 = mix(c011, c111, r_frac);
                 
                 vec4 c0 = mix(c00, c10, g_frac);
                 vec4 c1 = mix(c01, c11, g_frac);
@@ -147,6 +165,8 @@ class GlLutFilter(private val context: Context) {
         GLES20.glGenTextures(1, dummyTex, 0)
         dummyTextureId = dummyTex[0]
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, dummyTextureId)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
         val dummyBuffer = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
         dummyBuffer.put(byteArrayOf(0, 0, 0, 0))
         dummyBuffer.position(0)
@@ -183,8 +203,8 @@ class GlLutFilter(private val context: Context) {
             lutTextureId = textures[0]
 
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureId)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
 
