@@ -9,33 +9,60 @@ import kotlinx.coroutines.withContext
 import java.io.InputStream
 import kotlin.math.floor
 
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 object LutHelper {
     
     // Cache LUT bitmaps to avoid reloading and out of memory
-    private val lutCache = mutableMapOf<String, Bitmap>()
-    private val processedThumbnails = mutableMapOf<String?, Bitmap>()
+    private val lutCache = ConcurrentHashMap<String, Bitmap>()
+    private val processedThumbnails = ConcurrentHashMap<String?, Deferred<Bitmap>>()
     private var sampleThumbnail: Bitmap? = null
+    
+    private val generationMutex = Mutex()
+    private val sampleThumbnailMutex = Mutex()
 
-    suspend fun initAndCacheThumbnails(context: Context, lutFiles: List<String?>) = withContext(Dispatchers.Default) {
+    suspend fun initAndCacheThumbnails(context: Context, lutFiles: List<String?>) {
+        // Trigger sequential caching of all thumbnails
+        for (lutFile in lutFiles) {
+            getThumbnail(context, lutFile)
+        }
+        
+        // Clean up raw LUT bitmaps to free RAM
+        lutCache.clear()
+        sampleThumbnailMutex.withLock {
+            sampleThumbnail?.recycle()
+            sampleThumbnail = null
+        }
+    }
+
+    suspend fun getThumbnail(context: Context, lutFileName: String?): Bitmap {
+        val deferred = processedThumbnails.getOrPut(lutFileName) {
+            CoroutineScope(Dispatchers.IO).async {
+                loadOrGenerateThumbnail(context, lutFileName)
+            }
+        }
+        return deferred.await()
+    }
+
+    private suspend fun loadOrGenerateThumbnail(context: Context, lutFileName: String?): Bitmap {
         val cacheDir = java.io.File(context.cacheDir, "lut_thumbs")
         if (!cacheDir.exists()) cacheDir.mkdirs()
 
-        for (lutFile in lutFiles) {
-            val fileName = lutFile ?: "original"
-            val cacheFile = java.io.File(cacheDir, "$fileName.png")
+        val fileName = lutFileName ?: "original"
+        val cacheFile = java.io.File(cacheDir, "$fileName.png")
+
+        if (cacheFile.exists()) {
+            val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
+            if (bitmap != null) return bitmap
+        }
+
+        // Process sequentially to prevent OOM and crashes
+        return generationMutex.withLock {
+            val bitmap = applyLutToThumbnailInternal(context, lutFileName)
             
-            if (cacheFile.exists()) {
-                val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
-                if (bitmap != null) {
-                    processedThumbnails[lutFile] = bitmap
-                    continue
-                }
-            }
-
-            // Not found in cache, generate it
-            val bitmap = applyLutToThumbnailInternal(context, lutFile)
-            processedThumbnails[lutFile] = bitmap
-
             // Save to cache
             try {
                 java.io.FileOutputStream(cacheFile).use { out ->
@@ -44,35 +71,29 @@ object LutHelper {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            bitmap
         }
-        
-        // Clean up raw LUT bitmaps to free RAM
-        lutCache.clear()
-        sampleThumbnail?.recycle()
-        sampleThumbnail = null
-    }
-
-    suspend fun getThumbnail(context: Context, lutFileName: String?): Bitmap {
-        return processedThumbnails[lutFileName] ?: applyLutToThumbnailInternal(context, lutFileName)
     }
 
     private suspend fun applyLutToThumbnailInternal(context: Context, lutFileName: String?, sampleFileName: String = "sample_photo-2.JPG"): Bitmap = withContext(Dispatchers.Default) {
-        if (sampleThumbnail == null) {
-            val options = BitmapFactory.Options()
-            options.inJustDecodeBounds = true
-            context.assets.open(sampleFileName).use { BitmapFactory.decodeStream(it, null, options) }
-            
-            // Calculate inSampleSize for a thumbnail of ~150x150
-            options.inSampleSize = calculateInSampleSize(options, 150, 150)
-            options.inJustDecodeBounds = false
-            
-            val bitmap = context.assets.open(sampleFileName).use { BitmapFactory.decodeStream(it, null, options) }
-            // Center crop and scale to exactly 150x150 for uniformity
-            val minDim = kotlin.math.min(bitmap!!.width, bitmap.height)
-            val cropped = Bitmap.createBitmap(bitmap, (bitmap.width - minDim) / 2, (bitmap.height - minDim) / 2, minDim, minDim)
-            sampleThumbnail = Bitmap.createScaledBitmap(cropped, 150, 150, true)
-            if (cropped != bitmap) cropped.recycle()
-            bitmap.recycle()
+        sampleThumbnailMutex.withLock {
+            if (sampleThumbnail == null) {
+                val options = BitmapFactory.Options()
+                options.inJustDecodeBounds = true
+                context.assets.open(sampleFileName).use { BitmapFactory.decodeStream(it, null, options) }
+                
+                // Calculate inSampleSize for a thumbnail of ~150x150
+                options.inSampleSize = calculateInSampleSize(options, 150, 150)
+                options.inJustDecodeBounds = false
+                
+                val bitmap = context.assets.open(sampleFileName).use { BitmapFactory.decodeStream(it, null, options) }
+                // Center crop and scale to exactly 150x150 for uniformity
+                val minDim = kotlin.math.min(bitmap!!.width, bitmap.height)
+                val cropped = Bitmap.createBitmap(bitmap, (bitmap.width - minDim) / 2, (bitmap.height - minDim) / 2, minDim, minDim)
+                sampleThumbnail = Bitmap.createScaledBitmap(cropped, 150, 150, true)
+                if (cropped != bitmap) cropped.recycle()
+                bitmap.recycle()
+            }
         }
 
         val thumbnail = sampleThumbnail!!
@@ -80,10 +101,8 @@ object LutHelper {
             return@withContext thumbnail
         }
 
-        var lutBitmap = lutCache[lutFileName]
-        if (lutBitmap == null) {
-            lutBitmap = context.assets.open(lutFileName).use { BitmapFactory.decodeStream(it) }
-            lutCache[lutFileName] = lutBitmap!!
+        val lutBitmap = lutCache.getOrPut(lutFileName) {
+            context.assets.open(lutFileName).use { BitmapFactory.decodeStream(it) }
         }
 
         // Apply CPU LUT
