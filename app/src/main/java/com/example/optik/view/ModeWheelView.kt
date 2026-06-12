@@ -23,9 +23,7 @@ class ModeWheelView @JvmOverloads constructor(
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 20f * resources.displayMetrics.density
         textAlign = Paint.Align.CENTER
-        typeface = Typeface.DEFAULT_BOLD
     }
 
     private val basicBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -81,15 +79,33 @@ class ModeWheelView @JvmOverloads constructor(
         // It looks like the text rotates WITH the wheel.
         canvas.rotate(-angle, x, y)
         
+        textPaint.textSize = 18f * resources.displayMetrics.scaledDensity
+        textPaint.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
         if (withBg) {
-            val rect = RectF(x - 50f * resources.displayMetrics.density, 
-                             y - 25f * resources.displayMetrics.density,
-                             x + 50f * resources.displayMetrics.density,
-                             y + 15f * resources.displayMetrics.density)
-            canvas.drawRoundRect(rect, 12f * resources.displayMetrics.density, 12f * resources.displayMetrics.density, basicBgPaint)
+            val fm = textPaint.fontMetrics
+            val textHeight = fm.descent - fm.ascent
+            val textWidth = textPaint.measureText(text)
+            
+            // Padding 16dp horizontal, 6dp vertical to match XML
+            val padX = 16f * resources.displayMetrics.density
+            val padY = 6f * resources.displayMetrics.density
+            
+            val rect = RectF(
+                x - textWidth / 2f - padX, 
+                y - textHeight / 2f - padY,
+                x + textWidth / 2f + padX,
+                y + textHeight / 2f + padY
+            )
+            // 2dp corner radius to match XML
+            val cornerRadius = 2f * resources.displayMetrics.density
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, basicBgPaint)
         }
         
-        canvas.drawText(text, x, y + 8f * resources.displayMetrics.density, textPaint)
+        // Exact text vertical centering
+        val fm = textPaint.fontMetrics
+        val textBaselineY = y - (fm.ascent + fm.descent) / 2f
+        canvas.drawText(text, x, textBaselineY, textPaint)
         canvas.restore()
     }
 
