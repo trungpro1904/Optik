@@ -332,7 +332,7 @@ class BasicActivity : AppCompatActivity() {
     private fun setupUI() {
         val lutNames = listOf("Gốc", "Backrooms", "Classic Chrome", "CINESTILL", "Kodacolor", "Light Skin", "Hail Mary", "Retro", "Saturation+", "Summer", "Fujifilm C400", "Leica Monochrome", "Gotham", "Call me by your name")
         val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cinestill.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG", "fuji_c400.PNG", "leica_monochrome.PNG", "gotham.PNG", "call_me_by_your_name.PNG")
-        val lutAdapter = LUTAdapter(lutNames) { selectedLut ->
+        val lutAdapter = LUTAdapter(lutNames, lutFiles) { selectedLut ->
             val index = lutNames.indexOf(selectedLut)
             if (index >= 0) {
                 cameraHelper.setSelectedLut(lutFiles[index])
