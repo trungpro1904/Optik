@@ -592,6 +592,7 @@ class CameraManagerHelper(private val context: Context) {
         val sensorRect = sensorArraySize ?: Rect(0, 0, 0, 0)
         
         builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
+        builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL)
         
         val defaultMeteringArray = arrayOf(MeteringRectangle(sensorRect, 0))
         builder.set(CaptureRequest.CONTROL_AF_REGIONS, defaultMeteringArray)
@@ -601,6 +602,8 @@ class CameraManagerHelper(private val context: Context) {
             captureSession?.capture(builder.build(), null, backgroundHandler)
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            builder.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_IDLE)
+            builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
             isFocusLocked = false
             lastFocusRect = null
             captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)

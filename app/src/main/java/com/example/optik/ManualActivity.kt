@@ -447,8 +447,8 @@ class ManualActivity : AppCompatActivity() {
                 focusBox.visibility = View.VISIBLE
                 val focusBorder = findViewById<android.view.View>(R.id.focus_box_border)
                 focusBorder?.setBackgroundResource(R.drawable.focus_border)
-                focusBox.x = x - focusBox.width / 2f
-                focusBox.y = y - focusBox.height / 2f
+                focusBox.x = x + binding.previewArea.x - focusBox.width / 2f
+                focusBox.y = y + binding.previewArea.y - focusBox.height / 2f
                 
                 cameraHelper.focusAtPoint(x, y, binding.previewArea.width, binding.previewArea.height, true)
                 touchLockedFaceCenter = android.graphics.PointF(x, y)
