@@ -181,19 +181,25 @@ class BasicActivity : AppCompatActivity() {
                 
                 val gestures = result.gestures()
                 
-                // Action 1: 1 hand Open Palm -> Closed Fist
-                if (gestures.size == 1) {
-                    val gestureName = gestures[0][0].categoryName()
-                    if (gestureName == "Open_Palm") {
-                        wasOpenPalm = true
-                    } else if (gestureName == "Closed_Fist" && wasOpenPalm) {
-                        wasOpenPalm = false
-                        triggerGestureCapture()
-                    }
-                } else if (gestures.size == 2) {
+                val hasOpenPalm = gestures.any { it.isNotEmpty() && it[0].categoryName() == "Open_Palm" }
+                val hasClosedFist = gestures.any { it.isNotEmpty() && it[0].categoryName() == "Closed_Fist" }
+
+                // Action 1: Any hand Open Palm -> Closed Fist (works for 1 or multiple hands)
+                if (hasClosedFist && wasOpenPalm) {
+                    wasOpenPalm = false
+                    triggerGestureCapture()
+                    lastTwoHandDistance = -1f
+                    return@runOnUiThread
+                }
+                
+                if (hasOpenPalm) {
+                    wasOpenPalm = true
+                }
+
+                if (gestures.size == 2) {
                     // Action 2 & 3: 2 hands Open Palm -> Zoom
-                    val gesture1 = gestures[0][0].categoryName()
-                    val gesture2 = gestures[1][0].categoryName()
+                    val gesture1 = gestures[0].firstOrNull()?.categoryName()
+                    val gesture2 = gestures[1].firstOrNull()?.categoryName()
                     
                     if (gesture1 == "Open_Palm" && gesture2 == "Open_Palm") {
                         val hand1 = result.landmarks()[0]
