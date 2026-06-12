@@ -191,6 +191,7 @@ class ManualActivity : AppCompatActivity() {
     private lateinit var faceTracker: com.example.optik.camera.FaceTracker
     private var touchLockedFaceCenter: android.graphics.PointF? = null
     private var isTouchFocusLocked = false
+    private var isCapturing = false
     private lateinit var objectTracker: com.example.optik.camera.ObjectTracker
     private var trackedObjectId: Int? = null
     private var isTrackingFace = false
@@ -435,6 +436,7 @@ class ManualActivity : AppCompatActivity() {
         }
 
         binding.previewArea.setOnTouchListener { _, event ->
+            if (isCapturing) return@setOnTouchListener true
             if (event.action == android.view.MotionEvent.ACTION_DOWN) {
                 val x = event.x
                 val y = event.y
@@ -471,6 +473,34 @@ class ManualActivity : AppCompatActivity() {
                 }
             }
             true
+        }
+        
+        cameraHelper.onThumbnailAvailable = { bitmap ->
+            runOnUiThread {
+                findViewById<android.widget.ImageView>(R.id.album_thumbnail)?.setImageBitmap(bitmap)
+            }
+        }
+
+        cameraHelper.onCaptureStarted = { durationMs ->
+            runOnUiThread {
+                if (durationMs >= 125) {
+                    val progressView = findViewById<com.example.optik.view.CaptureProgressView>(R.id.capture_progress_view)
+                    progressView?.startProgress(durationMs)
+                }
+            }
+        }
+        
+        cameraHelper.onImageSaving = {
+            runOnUiThread {
+                findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility = View.VISIBLE
+            }
+        }
+        
+        cameraHelper.onPictureSaved = { success ->
+            runOnUiThread {
+                isCapturing = false
+                findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility = View.GONE
+            }
         }
         
         cameraHelper.onFocusFinished = { success ->
@@ -567,20 +597,20 @@ class ManualActivity : AppCompatActivity() {
     private var currentEvCompensation: Float = 0f
 
     private fun updateInfoBarValues() {
-        // Lấy giá trị hiện tại từ AE engine
+        val settings = SettingsManager.getInstance(this)
+        
+        // Lấy giá trị hiện tại từ AE engine (preview)
         val shutterNs = cameraHelper.getCurrentShutterNs()
         val iso = cameraHelper.getCurrentIso()
 
         val shutterStr = ExposureHelper.formatShutterSpeed(shutterNs)
         val isoStr = ExposureHelper.formatIso(iso)
 
-        // Hiển thị shutter speed theo giá trị chuẩn gần nhất
         binding.tvShutter.text = shutterStr
-        binding.quickSettings.tvShutterQuickVal.text = shutterStr
+        binding.quickSettings.tvShutterQuickVal.text = if (settings.isShutterAuto) "AUTO\n$shutterStr" else shutterStr
 
-        // Hiển thị ISO theo giá trị chuẩn gần nhất
         binding.tvIso.text = "ISO $isoStr"
-        binding.quickSettings.tvIsoQuickVal.text = if (iso > 0) isoStr else "AUTO"
+        binding.quickSettings.tvIsoQuickVal.text = if (settings.isIsoAuto) "AUTO\n$isoStr" else isoStr
 
         // Cập nhật EV
         binding.tvEv.text = String.format("%+.1f", currentEvCompensation)
@@ -655,6 +685,10 @@ class ManualActivity : AppCompatActivity() {
         }
 
         binding.btnAlbum.setOnClickListener {
+            if (findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility == View.VISIBLE) {
+                android.widget.Toast.makeText(this, "Đang xử lý ảnh...", android.widget.Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val collection = android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             val projection = arrayOf(android.provider.MediaStore.Images.Media._ID)
             val selection = "${android.provider.MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
@@ -790,6 +824,16 @@ class ManualActivity : AppCompatActivity() {
         }
 
         binding.btnShutter.setOnClickListener {
+            if (isCapturing) return@setOnClickListener
+            isCapturing = true
+            val overlay = binding.previewBlurOverlay
+            overlay.visibility = View.VISIBLE
+            overlay.setBackgroundColor(android.graphics.Color.BLACK)
+            overlay.alpha = 1f
+            overlay.animate().alpha(0f).setDuration(300).withEndAction { 
+                overlay.visibility = View.GONE
+                overlay.setBackgroundColor(android.graphics.Color.parseColor("#A0000000")) 
+            }.start()
             cameraHelper.captureImage()
         }
     }

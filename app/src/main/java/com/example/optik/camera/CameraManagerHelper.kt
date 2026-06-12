@@ -52,6 +52,11 @@ class CameraManagerHelper(private val context: Context) {
     private var pictureReader: ImageReader? = null
     var onImageAvailable: ((android.media.Image) -> Unit)? = null
     var onPictureSaved: ((Boolean) -> Unit)? = null
+    var onCaptureStarted: ((Long) -> Unit)? = null
+    var onImageSaving: (() -> Unit)? = null
+    var onThumbnailAvailable: ((android.graphics.Bitmap) -> Unit)? = null
+    
+    private var lastJpegOrientation = 0
 
     private var sensorArraySize: Rect? = null
     private var aeCompensationRange: android.util.Range<Int>? = null
@@ -448,24 +453,29 @@ class CameraManagerHelper(private val context: Context) {
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, compensation.coerceIn(range.lower, range.upper))
         }
         
-        try {
-            currentCameraId?.let { cameraId ->
+        val cameraId = currentCameraId
+        if (cameraId != null) {
+            try {
                 val chars = cameraManager.getCameraCharacteristics(cameraId)
                 val fpsRanges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
-                
                 var bestRange: android.util.Range<Int>? = null
                 if (fpsRanges != null) {
-                    bestRange = fpsRanges.firstOrNull { it.lower == videoFps && it.upper == videoFps }
-                    if (bestRange == null) {
-                        bestRange = fpsRanges.filter { it.upper == videoFps }.maxByOrNull { it.lower }
+                    if (isRecording) {
+                        bestRange = fpsRanges.firstOrNull { it.lower == videoFps && it.upper == videoFps }
+                        if (bestRange == null) {
+                            bestRange = fpsRanges.filter { it.upper == videoFps }.maxByOrNull { it.lower }
+                        }
+                    } else {
+                        val minFps = if (fpsRanges.any { it.lower == 15 }) 15 else 30
+                        bestRange = fpsRanges.filter { it.upper >= 30 && it.lower >= minFps }.minByOrNull { it.lower } ?: fpsRanges[0]
                     }
                 }
                 if (bestRange != null) {
                     builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, bestRange)
                 }
+            } catch (e: Exception) {
+                Log.e("CameraHelper", "Failed to set FPS range", e)
             }
-        } catch (e: Exception) {
-            Log.e("CameraHelper", "Failed to set FPS range", e)
         }
     }
 
@@ -698,8 +708,13 @@ class CameraManagerHelper(private val context: Context) {
             pictureReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
                 if (image != null) {
-                    saveImage(image)
+                    val buffer = image.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining())
+                    buffer.get(bytes)
                     image.close()
+                    Thread {
+                        saveImageBytes(bytes)
+                    }.start()
                 }
             }, backgroundHandler)
 
@@ -908,9 +923,16 @@ class CameraManagerHelper(private val context: Context) {
             val captureBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE) ?: return
             pictureReader?.surface?.let { captureBuilder.addTarget(it) }
             
-            captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentShutter)
+            val settings = SettingsManager.getInstance(context)
+            val isManual = settings.lastUsedMode == 1
+            
+            if (isManual && (!settings.isIsoAuto || !settings.isShutterAuto)) {
+                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso.coerceIn(minIso, maxIso))
+                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentShutter.coerceIn(minShutter, maxShutter))
+            } else {
+                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            }
             
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, captureRequestBuilder?.get(CaptureRequest.CONTROL_AF_MODE))
             
@@ -924,9 +946,9 @@ class CameraManagerHelper(private val context: Context) {
             } else {
                 (sensorOrientation + currentDeviceOrientation + 360) % 360
             }
+            lastJpegOrientation = jpegOrientation
             captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation)
             
-            val settings = SettingsManager.getInstance(context)
             if (settings.isLocationEnabled) {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -939,6 +961,21 @@ class CameraManagerHelper(private val context: Context) {
             }
             
             captureSession?.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber)
+                    val exposureNs = request.get(CaptureRequest.SENSOR_EXPOSURE_TIME) ?: currentShutter
+                    var exposureMs = exposureNs / 1_000_000L
+                    
+                    if (!isManual) {
+                        // In Auto mode, HAL handles exposure and often does multi-frame processing (taking 0.5-2s).
+                        // We provide a fake duration to ensure the progress ring shows up as visual feedback.
+                        exposureMs = 600L 
+                    }
+                    
+                    Handler(context.mainLooper).post {
+                        onCaptureStarted?.invoke(exposureMs)
+                    }
+                }
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
                     Log.d("CameraHelper", "Capture completed")
@@ -947,6 +984,9 @@ class CameraManagerHelper(private val context: Context) {
             
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error capturing image", e)
+            Handler(context.mainLooper).post {
+                onPictureSaved?.invoke(false)
+            }
         }
     }
     
@@ -975,10 +1015,10 @@ class CameraManagerHelper(private val context: Context) {
         return String.format("%s%04d%s", prefix, nextIndex, extension)
     }
 
-    private fun saveImage(image: android.media.Image) {
-        val buffer = image.planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
+    private fun saveImageBytes(bytes: ByteArray) {
+        Handler(context.mainLooper).post {
+            onImageSaving?.invoke()
+        }
         
         val settings = SettingsManager.getInstance(context)
         val targetRatioStr = settings.aspectRatio
@@ -1000,8 +1040,13 @@ class CameraManagerHelper(private val context: Context) {
             val currentRatio = Math.max(srcW, srcH).toFloat() / Math.min(srcW, srcH)
             if (Math.abs(currentRatio - targetRatio) > 0.05f) {
                 try {
-                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    if (bitmap != null) {
+                    val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        android.graphics.BitmapRegionDecoder.newInstance(bytes, 0, bytes.size)
+                    } else {
+                        android.graphics.BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)
+                    }
+                    
+                    if (decoder != null) {
                         val isPortrait = srcH > srcW
                         val actualTargetRatio = if (isPortrait) 1f / targetRatio else targetRatio
                         
@@ -1016,19 +1061,34 @@ class CameraManagerHelper(private val context: Context) {
                         
                         val x = (srcW - cropW) / 2
                         val y = (srcH - cropH) / 2
+                        val rect = android.graphics.Rect(x, y, x + cropW, y + cropH)
                         
-                        val cropped = android.graphics.Bitmap.createBitmap(bitmap, x, y, cropW, cropH)
-                        val outputStream = java.io.ByteArrayOutputStream()
-                        cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, outputStream)
-                        finalBytes = outputStream.toByteArray()
-                        
-                        bitmap.recycle()
-                        cropped.recycle()
+                        val cropped = decoder.decodeRegion(rect, android.graphics.BitmapFactory.Options())
+                        if (cropped != null) {
+                            val outputStream = java.io.ByteArrayOutputStream()
+                            cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, outputStream)
+                            finalBytes = outputStream.toByteArray()
+                            cropped.recycle()
+                        }
+                        decoder.recycle()
                     }
                 } catch (e: Exception) {
                     Log.e("CameraHelper", "Failed to crop image", e)
                 }
             }
+        }
+        
+        val optionsThumb = android.graphics.BitmapFactory.Options()
+        optionsThumb.inSampleSize = 8
+        val rawThumbnail = android.graphics.BitmapFactory.decodeByteArray(finalBytes, 0, finalBytes.size, optionsThumb)
+        if (rawThumbnail != null) {
+            val matrix = android.graphics.Matrix()
+            matrix.postRotate(lastJpegOrientation.toFloat())
+            val thumbnail = android.graphics.Bitmap.createBitmap(rawThumbnail, 0, 0, rawThumbnail.width, rawThumbnail.height, matrix, true)
+            Handler(context.mainLooper).post {
+                onThumbnailAvailable?.invoke(thumbnail)
+            }
+            if (thumbnail != rawThumbnail) rawThumbnail.recycle()
         }
         
         val filename = getNextFileName(false)

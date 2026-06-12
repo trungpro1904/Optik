@@ -89,7 +89,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center" />
-            
+
         <com.example.optik.view.OverlayView
             android:id="@+id/overlay_view"
             android:layout_width="match_parent"
@@ -151,6 +151,13 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#A0000000"
+            android:visibility="gone" />
+
+        <com.example.optik.view.CaptureProgressView
+            android:id="@+id/capture_progress_view"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_gravity="center"
             android:visibility="gone" />
 
     </FrameLayout>
@@ -315,22 +322,24 @@
         android:background="@color/bg_panel"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <!-- Album Button -->
         <ImageView
             android:id="@+id/btn_expand"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:padding="12dp"
-            android:src="@drawable/ic_expand_more"
-            android:rotation="180"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            app:tint="@color/accent_orange"
-            app:layout_constraintTop_toTopOf="parent"
+            android:padding="10dp"
+            android:rotation="180"
+            android:src="@drawable/ic_expand_more"
+            app:layout_constraintBottom_toTopOf="@+id/btn_shutter"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.498"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"/>
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/accent_orange" />
 
-        <!-- Album Button -->
         <FrameLayout
             android:id="@+id/btn_album"
             android:layout_width="64dp"
@@ -340,14 +349,22 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="@string/album"
-                android:textColor="@color/black"
-                android:textSize="14sp"
-                android:textStyle="bold"/>
+            <ImageView
+                android:id="@+id/album_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:background="@drawable/bg_album_rounded"
+                android:clipToOutline="true" />
+            <ProgressBar
+                android:id="@+id/album_progress"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="4dp"
+                android:visibility="gone"
+                android:indeterminateTint="@color/accent_orange" />
         </FrameLayout>
 
         <!-- Shutter Button -->

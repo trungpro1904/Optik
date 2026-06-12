@@ -178,8 +178,8 @@
             android:background="?attr/selectableItemBackground">
             <ImageView
                 android:id="@+id/iv_flash_quick_icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_flash_off"
                 android:contentDescription="Flash"

@@ -16,7 +16,7 @@ lifecycleViewmodelNav3 = "2.10.0"
 appcompat = "1.7.0"
 material = "1.12.0"
 constraintlayout = "2.2.0"
-mediapipe = "0.10.14"
+mediapipe = "0.10.35"
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }

@@ -86,4 +86,14 @@ class SettingsManager private constructor(context: Context) {
     var isHapticEnabled: Boolean
         get() = prefs.getBoolean("isHapticEnabled", true)
         set(value) = prefs.edit().putBoolean("isHapticEnabled", value).apply()
+
+    // ISO Auto (Manual Mode)
+    var isIsoAuto: Boolean
+        get() = prefs.getBoolean("isIsoAuto", true)
+        set(value) = prefs.edit().putBoolean("isIsoAuto", value).apply()
+
+    // Shutter Auto (Manual Mode)
+    var isShutterAuto: Boolean
+        get() = prefs.getBoolean("isShutterAuto", true)
+        set(value) = prefs.edit().putBoolean("isShutterAuto", value).apply()
 }

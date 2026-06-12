@@ -63,6 +63,10 @@ class GlLutFilter(private val context: Context) {
                     return;
                 }
                 
+                // Cực kỳ quan trọng: YUV -> RGB từ Camera đôi khi cho ra giá trị ngoài khoảng [0, 1] ở các vùng tối hoặc quá sáng (bề mặt bóng).
+                // Nếu không clamp, R, G, B sẽ vượt quá giới hạn khối LUT, dẫn đến loang màu sai lệch (artifacts).
+                textureColor = clamp(textureColor, 0.0, 1.0);
+                
                 float R = textureColor.r * 63.0;
                 float G = textureColor.g * 63.0;
                 float B = textureColor.b * 63.0;
