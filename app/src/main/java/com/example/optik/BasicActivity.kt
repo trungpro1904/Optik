@@ -221,8 +221,6 @@ class BasicActivity : AppCompatActivity() {
                                 switchNextLens(zoomIn = false)
                                 lastGestureActionTime = System.currentTimeMillis()
                                 lastTwoHandDistance = -1f
-                            } else {
-                                lastTwoHandDistance = distance
                             }
                         } else {
                             lastTwoHandDistance = distance
