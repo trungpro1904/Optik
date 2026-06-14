@@ -375,8 +375,8 @@
                         <option name="values">
                           <map>
                             <entry key="assetSourceType" value="FILE" />
-                            <entry key="outputName" value="square" />
-                            <entry key="sourceFile" value="D:\MyApplication\asset\Square.svg" />
+                            <entry key="outputName" value="infinity_focus" />
+                            <entry key="sourceFile" value="D:\camera_app\asset\infinity.svg" />
                           </map>
                         </option>
                       </PersistentState>

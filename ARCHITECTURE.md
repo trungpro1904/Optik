@@ -13,7 +13,7 @@ Tài liệu này mô tả luồng hoạt động tổng thể và vai trò của
 
 2. **Giao diện Người dùng (UI)**:
    - **`BasicActivity`**: Giao diện chụp tự động (Auto). Cung cấp trải nghiệm đơn giản, point-and-shoot.
-   - **`ManualActivity`**: Giao diện chụp thủ công (Pro/Manual). Cho phép can thiệp sâu vào các thông số máy ảnh như ISO, Tốc độ màn trập (Shutter Speed), Lấy nét tay (Manual Focus), Bù trừ sáng (EV), Tỉ lệ khung hình, v.v.
+   - **`ManualActivity`**: Giao diện chụp thủ công (Pro/Manual). Cho phép can thiệp sâu vào các thông số máy ảnh như ISO, Tốc độ màn trập (Shutter Speed), Cân bằng trắng (White Balance), Lấy nét tay (Manual Focus), Bù trừ sáng (EV), Tỉ lệ khung hình, v.v.
 
 3. **Khởi tạo và Quản lý Camera (`CameraManagerHelper.kt`)**:
    - Khi Activity được mở (`onResume`), luồng nền (Background Thread) được khởi động.
@@ -21,6 +21,7 @@ Tài liệu này mô tả luồng hoạt động tổng thể và vai trò của
    - Khởi tạo các Session chụp và các luồng đọc dữ liệu (`ImageReader` cho JPEG/RAW).
 
 4. **Thực hiện Chụp ảnh / Quay video**:
+   - **Hẹn giờ chụp (Timer)**: Nếu bật hẹn giờ (3s, 10s), đếm ngược trên UI, phát tiếng `beep` qua `SoundHelper`, sau đó kích hoạt chụp.
    - **Chụp ảnh**: Gọi `captureImage()` từ `CameraManagerHelper`. AE/AF được khóa, gửi yêu cầu chụp chất lượng cao, ghi dữ liệu từ `ImageReader` xuống bộ nhớ máy qua luồng nền, phát âm thanh `shutter_sound`.
    - **Quay video**: Khởi tạo `MediaRecorder` và OpenGL ES surface (`GlVideoProcessor.kt`) để render frame, ghi âm thanh (`rec_start` và `rec_stop`), lưu file `.mp4`.
 
@@ -39,9 +40,10 @@ Nằm trong package `com.example.optik.camera.*`
 - **`CameraManagerHelper.kt`**: Trái tim của ứng dụng.
   - **Quản lý Vòng đời**: `openCamera()`, `closeCamera()`, `startBackgroundThread()`, `stopBackgroundThread()`.
   - **Preview Flow**: Tạo `CameraCaptureSession`, liên tục đẩy các request `CaptureRequest.TEMPLATE_PREVIEW` lên sensor.
-  - **Capture Flow**: Xử lý tính toán thông số Manual (ISO, S) hoặc Auto, gửi request `CaptureRequest.TEMPLATE_STILL_CAPTURE`.
-  - **Focus Flow**: Hỗ trợ AF (chạm lấy nét, lấy nét theo pha/hành vi) và MF (truyền tham số `LENS_FOCUS_DISTANCE`). Lấy nét tracking thông qua `FaceTracker` / `ObjectTracker`.
-  - **Exposure (EV) Flow**: Cho phép ghi đè `CONTROL_AE_EXPOSURE_COMPENSATION` để bù trừ sáng khi thông số là Auto.
+  - **Capture Flow**: Xử lý tính toán thông số Manual (ISO, S, WB) hoặc Auto, gửi request `CaptureRequest.TEMPLATE_STILL_CAPTURE`.
+  - **Focus Flow**: Hỗ trợ AF (chạm lấy nét, lấy nét theo pha/hành vi) và MF (truyền tham số `LENS_FOCUS_DISTANCE`).
+  - **Exposure (EV) Flow**: Ghi đè `CONTROL_AE_EXPOSURE_COMPENSATION` để bù trừ sáng khi thông số ISO/S là Auto.
+  - **White Balance (WB) Flow**: Tắt `CONTROL_AWB_MODE`, thay thế bằng ma trận chỉnh màu `COLOR_CORRECTION_TRANSFORM` và hệ số `COLOR_CORRECTION_GAINS` được tính toán thủ công.
 
 - **`GlVideoProcessor.kt` / `EglCore.kt`**: 
   - Quản lý luồng xử lý đồ hoạ OpenGL để ghi lại frame từ Camera thành Video, có thể chèn các bộ lọc (filters) thời gian thực.
@@ -51,34 +53,40 @@ Nằm trong package `com.example.optik.view.*`
 
 - **`AutoFitTextureView.kt`**: Surface hiển thị hình ảnh từ Camera, tự động scale theo đúng tỉ lệ khung hình (4:3, 16:9, 1:1) mà không bị méo.
 - **`EvSliderView.kt`**: Giao diện thanh trượt bù trừ sáng (EV). Cho phép kéo thả mượt mà, snap vào các mức 1/3 stop. Gửi callback `onEvChangeListener` về Activity.
-- **`FocusSliderView.kt` / Focus UI**: Giao diện chọn AF/MF. Khi ở chế độ MF, hiển thị thanh trượt khoảng cách lấy nét từ gần đến vô cực (infinity).
-- **`CaptureProgressView.kt`**: Vòng quay xử lý hiển thị khi thời gian phơi sáng > 1/8s. Đồng bộ với tốc độ màn trập (Shutter Speed) thực tế.
-- **`LevelIndicatorView.kt`**: Thước thủy cân bằng điện tử. Lấy dữ liệu từ cảm biến gia tốc/trọng lực của điện thoại để vẽ UI báo hiệu điện thoại đang bị nghiêng/lệch.
+- **`WhitebalanceGrid.kt`**: Mặt lưới tọa độ màu 2D để tinh chỉnh WB. Cho phép kéo thả tự do chấm cam (Cursor) và báo tọa độ Tint (A-B, G-M) về Activity. Tự vẽ background map màu với góc nghiêng 45 độ.
+- **`FocusSliderView.kt` / Focus UI**: Giao diện chọn AF/MF. Thanh trượt lấy nét từ gần đến vô cực (infinity).
+- **`CaptureProgressView.kt`**: Vòng quay xử lý hiển thị khi phơi sáng > 1/8s. Đồng bộ với tốc độ màn trập thực tế.
+- **`LevelIndicatorView.kt`**: Thước thủy cân bằng điện tử.
 
 ### C. Tiện Ích (Helpers / Managers)
 Nằm trong package `com.example.optik.settings.*` và package chung.
 
 - **`SettingsManager.kt`**: 
-  - Quản lý trạng thái lưu trữ của ứng dụng bằng `SharedPreferences` (Lưu độ phân giải, tỉ lệ khung hình, ISO, chế độ Flash, Grid, Level, Haptic, định dạng RAW/JPEG, v.v.).
+  - Quản lý trạng thái lưu trữ của ứng dụng bằng `SharedPreferences` (Lưu độ phân giải, tỉ lệ khung hình, ISO, chế độ Flash, Drive Mode, Grid, Level, Haptic, định dạng RAW/JPEG, v.v.).
+- **`WhitebalanceHelper.kt`**: 
+  - Chứa thuật toán và dữ liệu màu để quy đổi dải nhiệt độ Kelvin (2000K-10000K) thành phổ RGB. 
+  - Xử lý quay trục hệ màu 45 độ (CCW) và bù trừ khử nhiễu ám xanh (Green Bias) trên cảm biến.
 - **`SoundHelper.kt`**: 
-  - Tải các file `.wav` từ thư mục `res/raw/`. 
-  - Quản lý `SoundPool` để phát ngay lập tức các âm thanh: `shutter_sound` (chụp), `rec_start` / `rec_stop` (quay video), `beep` (đếm ngược 3s).
+  - Quản lý `SoundPool` phát âm thanh shutter, beep đếm ngược, rec start/stop.
 - **`HapticHelper.kt`**: 
-  - Rung phản hồi (Haptic feedback) cho các thao tác trượt, bấm nút, cảnh báo.
+  - Rung phản hồi (Haptic feedback) cho thao tác UI và Capture.
 - **`ExposureHelper.kt`**: 
-  - Chuyển đổi các thông số kỹ thuật (như nanoseconds) sang chuỗi định dạng dễ đọc cho con người (vd: `1/250`, `1/8`, `1"`, `ISO 800`).
+  - Chuyển đổi các thông số kỹ thuật sang text như `1/250`, `ISO 800`.
 
 ---
 
 ## 3. Luồng Xử Lý Sự Kiện (Event Loop) Ở Chế Độ Manual
 
-1. Người dùng bấm vào cụm `Quick Settings` để chỉnh sửa (ví dụ: Tốc độ màn trập).
-2. Panel chọn S hiện lên. Người dùng chọn `1/125`.
-3. `ManualActivity` gọi `cameraHelper.updateManualShutter(shutterNs)`.
-4. `CameraManagerHelper` lưu giá trị, tắt cờ AE (Auto Exposure) trên cảm biến (chuyển sang `CONTROL_AE_MODE_OFF`).
-5. Gửi lại `CaptureRequest` cho luồng preview với Shutter và ISO mới.
-6. Khi người dùng bấm chụp, `cameraHelper.captureImage()` sẽ lấy đúng thông số đang cấu hình để build lệnh chụp (Still Capture) gửi xuống phần cứng máy ảnh.
-7. ImageReader nhận byte mảng hình ảnh, tạo một luồng (thread) mới ghi thẳng ra thẻ nhớ. Cùng lúc, `SoundHelper` kêu cạch, `CaptureProgressView` quay (nếu chụp chậm), và Thumbnail ở góc cập nhật khi file đã lưu xong.
+1. Người dùng bấm vào cụm `Quick Settings` (Ví dụ: Cân bằng trắng - WB).
+2. Panel UI tuỳ chỉnh WB hiện lên (gồm Slider Kelvin và Grid Tint 2D). Người dùng trượt đến `5500K` và kéo lưới màu.
+3. `WhitebalanceGrid` và thanh Kelvin gửi event callback về `ManualActivity`. 
+4. UI Quick Settings hiển thị tức thì chữ `K1`. `ManualActivity` gọi `cameraHelper.updateManualWb(mode, kelvin, ab, gm)`.
+5. `CameraManagerHelper` tính toán Gains và ma trận Transform thông qua `WhitebalanceHelper`, tắt AWB (chuyển sang chế độ Manual WB).
+6. Gửi lại `CaptureRequest` cho luồng preview với hệ màu mới.
+7. Khi người dùng bấm chụp, nếu có **Hẹn Giờ (Timer)**, `ManualActivity` đếm ngược và kêu *beep* (thông qua `SoundHelper`).
+8. Hết giờ, `cameraHelper.captureImage()` sẽ lấy đúng thông số đang cấu hình (WB, ISO, S, MF) để build lệnh chụp (Still Capture).
+9. Cảm biến thực thi chụp. Nếu thời gian chậm, `CaptureProgressView` xoay. Haptic rung nhẹ.
+10. ImageReader nhận byte mảng hình ảnh gốc, tạo luồng ghi JPEG/RAW thẻ nhớ. Thumbnail góc màn hình được cập nhật ngay khi lưu xong.
 
 ---
-_Tài liệu được tạo tự động để hỗ trợ cho việc bảo trì và mở rộng tính năng sau này._
+_Tài liệu được cập nhật mới nhất cho Phiên bản Pro/Manual_
