@@ -87,6 +87,11 @@ class SettingsManager private constructor(context: Context) {
         get() = prefs.getBoolean("isHapticEnabled", true)
         set(value) = prefs.edit().putBoolean("isHapticEnabled", value).apply()
 
+    // Shutter Sound Enabled
+    var isShutterSoundEnabled: Boolean
+        get() = prefs.getBoolean("isShutterSoundEnabled", true)
+        set(value) = prefs.edit().putBoolean("isShutterSoundEnabled", value).apply()
+
     // ISO Auto (Manual Mode)
     var isIsoAuto: Boolean
         get() = prefs.getBoolean("isIsoAuto", true)
@@ -96,4 +101,22 @@ class SettingsManager private constructor(context: Context) {
     var isShutterAuto: Boolean
         get() = prefs.getBoolean("isShutterAuto", true)
         set(value) = prefs.edit().putBoolean("isShutterAuto", value).apply()
+        
+    // Flash Mode: 0 = Off, 1 = On/Auto, 2 = Torch
+    var flashMode: Int
+        get() = prefs.getInt("flashMode", 0)
+        set(value) = prefs.edit().putInt("flashMode", value).apply()
+        
+    // Drive Mode: 0 = Single, 1 = Burst, 2 = 10s Timer, 3 = 3s Timer
+    var driveMode: Int
+        get() = prefs.getInt("driveMode", 0)
+        set(value) = prefs.edit().putInt("driveMode", value).apply()
+
+    var focusMode: Int
+        get() = prefs.getInt("focusMode", 0) // 0 = AF, 1 = MF
+        set(value) = prefs.edit().putInt("focusMode", value).apply()
+
+    var manualFocusDistance: Float
+        get() = prefs.getFloat("manualFocusDistance", 0.0f) // 0.0f is infinity
+        set(value) = prefs.edit().putFloat("manualFocusDistance", value).apply()
 }

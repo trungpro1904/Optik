@@ -34,7 +34,6 @@
             <include layout="@layout/item_setting_switch" android:id="@+id/row_save_location" />
             <include layout="@layout/item_setting_row" android:id="@+id/row_photo_format" />
             <include layout="@layout/item_setting_row" android:id="@+id/row_photo_resolution" />
-            <include layout="@layout/item_setting_row" android:id="@+id/row_raw_compression" />
             <include layout="@layout/item_setting_row" android:id="@+id/row_video_format" />
 
             <View android:layout_width="match_parent" android:layout_height="16dp" />

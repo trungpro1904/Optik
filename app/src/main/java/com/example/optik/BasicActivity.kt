@@ -4,6 +4,8 @@ import android.animation.ObjectAnimator
 import android.content.Intent
 import android.graphics.SurfaceTexture
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.OrientationEventListener
 import android.view.TextureView
 import android.view.View
@@ -43,7 +45,24 @@ class BasicActivity : AppCompatActivity() {
     private var countdownSeconds = 0
     private var lastTwoHandDistance = -1f
     
+    // Video Timer State
     private var isRecording = false
+    private var videoRecordingStartTime = 0L
+    private val videoTimerHandler = Handler(Looper.getMainLooper())
+    private val videoTimerRunnable = object : Runnable {
+        override fun run() {
+            if (isRecording) {
+                val elapsed = System.currentTimeMillis() - videoRecordingStartTime
+                val seconds = (elapsed / 1000).toInt()
+                val h = seconds / 3600
+                val m = (seconds % 3600) / 60
+                val s = seconds % 60
+                val timeStr = if (h > 0) String.format("%02d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+                findViewById<android.widget.TextView>(R.id.tv_video_timer)?.text = timeStr
+                videoTimerHandler.postDelayed(this, 500)
+            }
+        }
+    }
     private var videoConfigs: List<CameraManagerHelper.VideoConfig> = emptyList()
     private var isFlashOn = false
     private var isTouchFocusLocked = false
@@ -52,6 +71,8 @@ class BasicActivity : AppCompatActivity() {
     private var isTrackingFace = false
     private var latestObjects: List<com.google.mlkit.vision.objects.DetectedObject> = emptyList()
     private var maxCameraMp = 12
+    
+    private lateinit var soundHelper: com.example.optik.camera.SoundHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +81,7 @@ class BasicActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         cameraHelper = CameraManagerHelper(this)
+        soundHelper = com.example.optik.camera.SoundHelper(this)
         
         objectTracker = com.example.optik.camera.ObjectTracker { objects ->
             latestObjects = objects
@@ -583,6 +605,14 @@ class BasicActivity : AppCompatActivity() {
             override fun run() {
                 if (countdownSeconds > 0) {
                     countdownText.text = "$countdownSeconds"
+                    
+                    // Play beep sound (urgent if <= 3s)
+                    if (countdownSeconds <= 3) {
+                        soundHelper.playBeep(2f)
+                    } else {
+                        soundHelper.playBeep(1f)
+                    }
+                    
                     // Flash effect
                     binding.previewBlurOverlay.visibility = android.view.View.VISIBLE
                     binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.WHITE)
@@ -781,15 +811,6 @@ class BasicActivity : AppCompatActivity() {
             videoConfigs = info.videoConfigs
         }
 
-        cameraHelper.onCaptureStarted = { durationMs ->
-            runOnUiThread {
-                if (durationMs >= 125) {
-                    val progressView = findViewById<com.example.optik.view.CaptureProgressView>(R.id.capture_progress_view)
-                    progressView?.startProgress(durationMs)
-                }
-            }
-        }
-        
         cameraHelper.onImageSaving = {
             runOnUiThread {
                 findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility = View.VISIBLE
@@ -845,16 +866,38 @@ class BasicActivity : AppCompatActivity() {
                     if (!cameraHelper.startRecording(binding.previewArea, validSize, fps)) {
                         isRecording = false
                         android.widget.Toast.makeText(this@BasicActivity, "Failed to start recording", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        soundHelper.playRecStart()
+                        
+                        // Start timer
+                        videoRecordingStartTime = System.currentTimeMillis()
+                        val tvTimer = findViewById<android.widget.TextView>(R.id.tv_video_timer)
+                        tvTimer?.visibility = View.VISIBLE
+                        tvTimer?.text = "00:00"
+                        videoTimerHandler.postDelayed(videoTimerRunnable, 500)
                     }
                 } else {
+                    soundHelper.playRecStop()
                     cameraHelper.stopRecording()
+                    
+                    // Stop timer
+                    findViewById<android.widget.TextView>(R.id.tv_video_timer)?.visibility = View.GONE
+                    videoTimerHandler.removeCallbacks(videoTimerRunnable)
                 }
                 updateRecordingUI()
             } else {
                 if (isCapturing) return@setOnClickListener
                 isCapturing = true
+                soundHelper.playShutter()
                 binding.previewBlurOverlay.visibility = View.VISIBLE; binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.BLACK); binding.previewBlurOverlay.alpha = 1f
                 binding.previewBlurOverlay.animate().alpha(0f).setDuration(300).withEndAction { binding.previewBlurOverlay.visibility = View.GONE; binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.parseColor("#A0000000")) }.start()
+                
+                val currentShutterMs = cameraHelper.getCurrentShutterNs() / 1_000_000L
+                if (currentShutterMs >= 125) {
+                    val progressView = findViewById<com.example.optik.view.CaptureProgressView>(R.id.capture_progress_view)
+                    progressView?.startProgress(currentShutterMs)
+                }
+                
                 cameraHelper.captureImage()
             }
         }
@@ -994,6 +1037,7 @@ class BasicActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        soundHelper.release()
         try { objectTracker.close() } catch (e: Exception) {}
     }
 }

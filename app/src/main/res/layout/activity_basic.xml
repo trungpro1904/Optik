@@ -117,6 +117,25 @@
             android:id="@+id/overlay_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/tv_video_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="16dp"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="4"
+            android:background="@drawable/bg_timer"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone"
+            android:text="00:00" />
             
         <include layout="@layout/layout_focus_box" />
 

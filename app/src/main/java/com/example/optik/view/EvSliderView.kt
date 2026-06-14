@@ -82,8 +82,10 @@ class EvSliderView @JvmOverloads constructor(
         val w = width.toFloat()
         val h = height.toFloat()
 
-        // 1. Draw Title "EV"
-        canvas.drawText("EV", w / 2, 25f * density, titlePaint)
+        // 1. Draw Title "EV" with current value
+        val formattedEv = if (evValue > 0.01f) "+%.1f".format(evValue) else if (evValue < -0.01f) "%.1f".format(evValue) else "0.0"
+        val titleText = if (abs(evValue) < 0.01f) "EV 0.0" else "EV $formattedEv"
+        canvas.drawText(titleText, w / 2, 25f * density, titlePaint)
 
         // 2. Draw Close Button "X" (Simple X)
         val xSize = 10f * density

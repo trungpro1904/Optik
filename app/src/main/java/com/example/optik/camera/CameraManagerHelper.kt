@@ -50,6 +50,11 @@ class CameraManagerHelper(private val context: Context) {
 
     private var imageReader: ImageReader? = null
     private var pictureReader: ImageReader? = null
+    private var rawReader: ImageReader? = null
+    
+    private val rawResultsMap = java.util.concurrent.ConcurrentHashMap<Long, TotalCaptureResult>()
+    private val rawImagesMap = java.util.concurrent.ConcurrentHashMap<Long, android.media.Image>()
+    
     var onImageAvailable: ((android.media.Image) -> Unit)? = null
     var onPictureSaved: ((Boolean) -> Unit)? = null
     var onCaptureStarted: ((Long) -> Unit)? = null
@@ -88,7 +93,20 @@ class CameraManagerHelper(private val context: Context) {
     private var maxIso: Int = 3200
     private var minShutter: Long = 1000000L // 1ms
     private var maxShutter: Long = 100000000L // 1/10s
-    private var currentEvCompensation: Float = 0f
+    var currentEvCompensation: Float = 0f
+        private set
+    
+    var manualIso: Int? = null
+    var manualShutter: Long? = null
+    var meteringMode: Int = 0 // 0: Matrix, 1: Center, 2: Spot
+    
+    var manualWbMode: String = "AWB"
+    var manualKelvin: Int = 5500
+    var manualTintAB: Int = 0
+    var manualTintGM: Int = 0
+    
+    var onEvCalculated: ((Float) -> Unit)? = null
+    private var evCalculationCounter = 0
     
     private var orientationEventListener: OrientationEventListener? = null
     private var currentDeviceOrientation: Int = 0
@@ -116,8 +134,19 @@ class CameraManagerHelper(private val context: Context) {
     )
 
     // Expose current AE values for info bar
-    fun getCurrentIso(): Int = currentIso
-    fun getCurrentShutterNs(): Long = currentShutter
+    fun getCurrentIso(): Int = manualIso ?: currentIso
+    fun getCurrentShutterNs(): Long = manualShutter ?: currentShutter
+    var currentCalculatedEv: Float = 0f
+    
+    private val previewCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
+            val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+            // Chỉ cập nhật auto values nếu người dùng không chọn thông số manual
+            if (iso != null && manualIso == null) currentIso = iso
+            if (shutter != null && manualShutter == null) currentShutter = shutter
+        }
+    }
 
     fun setSelectedLut(fileName: String?) {
         selectedLutFileName = fileName
@@ -438,12 +467,77 @@ class CameraManagerHelper(private val context: Context) {
     private fun applyCurrentSettings() {
         val builder = captureRequestBuilder ?: return
         
-        if (isFlashOn) {
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH)
-            builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
+        val settings = SettingsManager.getInstance(context)
+        if (settings.focusMode == 1) { // MF
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, settings.manualFocusDistance)
+        } else { // AF
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+        }
+        
+        // Manual WB
+        if (manualWbMode == "AWB") {
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
         } else {
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-            builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+            val gains = com.example.optik.settings.WhitebalanceHelper.colorTemperatureToRggb(manualKelvin, manualTintAB, manualTintGM)
+            builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, gains)
+            builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, android.hardware.camera2.params.ColorSpaceTransform(intArrayOf(
+                1, 1, 0, 1, 0, 1,
+                0, 1, 1, 1, 0, 1,
+                0, 1, 0, 1, 1, 1
+            )))
+        }
+        
+        if (manualIso != null && manualShutter != null) {
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            builder.set(CaptureRequest.SENSOR_SENSITIVITY, manualIso)
+            // Giới hạn thời gian phơi sáng của preview tối đa 1/30s để không bị đứng khung hình
+            val previewShutter = manualShutter!!.coerceAtMost(33_333_333L)
+            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewShutter)
+        } else {
+            val settings = SettingsManager.getInstance(context)
+            when (settings.flashMode) {
+                1 -> { // Bật
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH)
+                    builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_SINGLE)
+                }
+                2 -> { // Đèn pin (Torch)
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
+                }
+                else -> { // Tắt
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
+                }
+            }
+            if (manualIso != null) {
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, manualIso)
+            }
+            if (manualShutter != null) {
+                val previewShutter = manualShutter!!.coerceAtMost(33_333_333L)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewShutter)
+            }
+        }
+        
+        val sensorRect = sensorArraySize
+        if (sensorRect != null) {
+            val meteringRect = when (meteringMode) {
+                2 -> { // Spot (10% center)
+                    val w = sensorRect.width() / 10
+                    val h = sensorRect.height() / 10
+                    Rect(sensorRect.centerX() - w/2, sensorRect.centerY() - h/2, sensorRect.centerX() + w/2, sensorRect.centerY() + h/2)
+                }
+                1 -> { // Center (30% center)
+                    val w = (sensorRect.width() * 0.3f).toInt()
+                    val h = (sensorRect.height() * 0.3f).toInt()
+                    Rect(sensorRect.centerX() - w/2, sensorRect.centerY() - h/2, sensorRect.centerX() + w/2, sensorRect.centerY() + h/2)
+                }
+                else -> sensorRect // Matrix
+            }
+            val meteringArray = arrayOf(MeteringRectangle(meteringRect, MeteringRectangle.METERING_WEIGHT_MAX))
+            builder.set(CaptureRequest.CONTROL_AE_REGIONS, meteringArray)
         }
         
         val range = aeCompensationRange
@@ -510,11 +604,88 @@ class CameraManagerHelper(private val context: Context) {
         }
     }
 
+    private fun checkAndSaveRawMatched(timestamp: Long) {
+        Log.d("CameraHelper", "checkAndSaveRawMatched: ts=$timestamp, hasResult=${rawResultsMap.containsKey(timestamp)}, hasImage=${rawImagesMap.containsKey(timestamp)}")
+        val result = rawResultsMap[timestamp]
+        val image = rawImagesMap[timestamp]
+        if (result != null && image != null) {
+            rawResultsMap.remove(timestamp)
+            rawImagesMap.remove(timestamp)
+            Log.d("CameraHelper", "RAW matched! Starting save thread")
+            Thread {
+                saveRawImage(image, result)
+            }.start()
+        }
+    }
+
+    private fun saveRawImage(image: android.media.Image, result: TotalCaptureResult) {
+        Handler(context.mainLooper).post { onImageSaving?.invoke() }
+        try {
+            Log.d("CameraHelper", "saveRawImage: image format=${image.format}, width=${image.width}, height=${image.height}")
+            val filename = getNextFileName(false).replace(".jpg", ".dng")
+            val cameraId = currentCameraId
+            if (cameraId == null) {
+                Log.e("CameraHelper", "saveRawImage: currentCameraId is null")
+                Handler(context.mainLooper).post { onPictureSaved?.invoke(false) }
+                return
+            }
+            val chars = cameraManager.getCameraCharacteristics(cameraId)
+            val dngCreator = android.hardware.camera2.DngCreator(chars, result)
+            
+            val degrees = result.get(CaptureResult.JPEG_ORIENTATION) ?: lastJpegOrientation
+            val orientation = when (degrees) {
+                90 -> android.media.ExifInterface.ORIENTATION_ROTATE_90
+                180 -> android.media.ExifInterface.ORIENTATION_ROTATE_180
+                270 -> android.media.ExifInterface.ORIENTATION_ROTATE_270
+                else -> android.media.ExifInterface.ORIENTATION_NORMAL
+            }
+            dngCreator.setOrientation(orientation)
+            
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/x-adobe-dng")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Optik")
+                }
+            }
+            
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            Log.d("CameraHelper", "saveRawImage: uri=$uri")
+            
+            if (uri != null) {
+                val outputStream = resolver.openOutputStream(uri)
+                if (outputStream != null) {
+                    Log.d("CameraHelper", "saveRawImage: writing DNG...")
+                    dngCreator.writeImage(outputStream, image)
+                    outputStream.close()
+                    Log.d("CameraHelper", "saveRawImage: DNG written successfully")
+                } else {
+                    Log.e("CameraHelper", "saveRawImage: outputStream is null")
+                }
+            } else {
+                Log.e("CameraHelper", "saveRawImage: uri is null")
+            }
+            dngCreator.close()
+            
+            Handler(context.mainLooper).post {
+                onPictureSaved?.invoke(true)
+            }
+        } catch (e: Exception) {
+            Log.e("CameraHelper", "Error saving RAW image: ${e.message}", e)
+            Handler(context.mainLooper).post {
+                onPictureSaved?.invoke(false)
+            }
+        } finally {
+            image.close()
+        }
+    }
+
     var onFocusFinished: ((Boolean) -> Unit)? = null
     private var isFocusing = false
 
-    fun focusAtPoint(x: Float, y: Float, viewWidth: Int, viewHeight: Int, isManual: Boolean = false) {
-        if (isFocusing && !isManual) return
+    fun focusAtPoint(x: Float, y: Float, viewWidth: Int, viewHeight: Int, isUserTouch: Boolean = false) {
+        if (isFocusing && !isUserTouch) return
         
         val sensorRect = sensorArraySize ?: return
         val builder = captureRequestBuilder ?: return
@@ -599,7 +770,7 @@ class CameraManagerHelper(private val context: Context) {
         
         try {
             captureSession?.capture(builder.build(), null, backgroundHandler)
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            applyCurrentSettings()
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
             isFocusLocked = false
             lastFocusRect = null
@@ -692,6 +863,13 @@ class CameraManagerHelper(private val context: Context) {
                     isProcessingYuv = true
                     try {
                         onImageAvailable?.invoke(image)
+                        
+                        if (manualIso != null && manualShutter != null) {
+                            evCalculationCounter++
+                            if (evCalculationCounter % 10 == 0) {
+                                calculateManualEv(image)
+                            }
+                        }
                     } catch (e: Exception) {
                         Log.e("CameraHelper", "Error processing frame", e)
                     } finally {
@@ -704,19 +882,73 @@ class CameraManagerHelper(private val context: Context) {
             val largestSize = map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width * it.height }
                 ?: Size(1920, 1080)
 
-            pictureReader = ImageReader.newInstance(largestSize.width, largestSize.height, ImageFormat.JPEG, 1)
-            pictureReader?.setOnImageAvailableListener({ reader ->
-                val image = reader.acquireLatestImage()
-                if (image != null) {
-                    val buffer = image.planes[0].buffer
-                    val bytes = ByteArray(buffer.remaining())
-                    buffer.get(bytes)
-                    image.close()
-                    Thread {
-                        saveImageBytes(bytes)
-                    }.start()
+            val formatStr = settings.photoFormat
+            var hasJpeg = formatStr.contains("JPEG")
+            var hasRaw = formatStr.contains("RAW")
+            
+            // --- DIAGNOSTIC LOGGING ---
+            Log.d("CameraHelper", "DIAGNOSTIC: Current Camera ID: $currentCameraId")
+            val caps = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+            Log.d("CameraHelper", "DIAGNOSTIC: RAW capability on logical camera: ${caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)}")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val physicalIds = characteristics.physicalCameraIds
+                Log.d("CameraHelper", "DIAGNOSTIC: Physical Camera IDs: $physicalIds")
+                physicalIds.forEach { pid ->
+                    try {
+                        val pChars = cameraManager.getCameraCharacteristics(pid)
+                        val pCaps = pChars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                        val pMap = pChars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        val pRawSizes = pMap?.getOutputSizes(ImageFormat.RAW_SENSOR)
+                        Log.d("CameraHelper", "DIAGNOSTIC: Physical ID $pid - RAW capability: ${pCaps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)}, RAW sizes: ${pRawSizes?.map{it.toString()}}")
+                    } catch(e:Exception){}
                 }
-            }, backgroundHandler)
+            }
+            // --------------------------
+
+            if (hasRaw) {
+                val rawSizes = map?.getOutputSizes(ImageFormat.RAW_SENSOR)
+                Log.d("CameraHelper", "RAW sizes available: ${rawSizes?.map { "${it.width}x${it.height}" }}")
+                if (rawSizes != null && rawSizes.isNotEmpty()) {
+                    val largestRaw = rawSizes.maxByOrNull { it.width * it.height } ?: rawSizes[0]
+                    Log.d("CameraHelper", "Creating rawReader: ${largestRaw.width}x${largestRaw.height}")
+                    rawReader = ImageReader.newInstance(largestRaw.width, largestRaw.height, ImageFormat.RAW_SENSOR, 2)
+                    rawReader?.setOnImageAvailableListener({ reader ->
+                        val image = reader.acquireNextImage()
+                        if (image != null) {
+                            val timestamp = image.timestamp
+                            Log.d("CameraHelper", "RAW image received, timestamp=$timestamp")
+                            rawImagesMap[timestamp] = image
+                            checkAndSaveRawMatched(timestamp)
+                        } else {
+                            Log.w("CameraHelper", "RAW acquireNextImage returned null")
+                        }
+                    }, backgroundHandler)
+                } else {
+                    Log.w("CameraHelper", "Camera does not support RAW_SENSOR format. Falling back to JPEG.")
+                    hasRaw = false
+                    hasJpeg = true
+                    // Show a toast on the main thread
+                    Handler(context.mainLooper).post {
+                        android.widget.Toast.makeText(context, "RAW is not supported by this lens. Falling back to JPEG.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            if (hasJpeg || (!hasJpeg && !hasRaw)) {
+                pictureReader = ImageReader.newInstance(largestSize.width, largestSize.height, ImageFormat.JPEG, 1)
+                pictureReader?.setOnImageAvailableListener({ reader ->
+                    val image = reader.acquireLatestImage()
+                    if (image != null) {
+                        val buffer = image.planes[0].buffer
+                        val bytes = ByteArray(buffer.remaining())
+                        buffer.get(bytes)
+                        image.close()
+                        Thread {
+                            saveImageBytes(bytes)
+                        }.start()
+                    }
+                }, backgroundHandler)
+            }
 
             val surfaces = mutableListOf<Surface>()
             if (!isRecording) {
@@ -724,6 +956,9 @@ class CameraManagerHelper(private val context: Context) {
                     imageReader?.surface?.let { surfaces.add(it) }
                 }
                 pictureReader?.surface?.let { surfaces.add(it) }
+                if (formatStr.contains("RAW")) {
+                    rawReader?.surface?.let { surfaces.add(it) }
+                }
             }
             
             glVideoProcessor.onInputSurfaceReady = { inputSurface ->
@@ -752,14 +987,7 @@ class CameraManagerHelper(private val context: Context) {
                             
                             val request = captureRequestBuilder?.build()
                             if (request != null) {
-                                session.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
-                                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                                        val iso = result.get(CaptureResult.SENSOR_SENSITIVITY)
-                                        val shutter = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-                                        if (iso != null) currentIso = iso
-                                        if (shutter != null) currentShutter = shutter
-                                    }
-                                }, backgroundHandler)
+                                session.setRepeatingRequest(request, previewCaptureCallback, backgroundHandler)
                             }
     
                             if (isRecording) {
@@ -877,17 +1105,22 @@ class CameraManagerHelper(private val context: Context) {
         }
     }
     
-    fun toggleFlash(isOn: Boolean) {
-        isFlashOn = isOn
-        applyCurrentSettings()
+    fun updateFlashMode(mode: Int) {
+        val settings = SettingsManager.getInstance(context)
+        settings.flashMode = mode
         try {
-            val request = captureRequestBuilder?.build()
-            if (request != null) {
+            captureRequestBuilder?.let { builder ->
+                applyCurrentSettings()
+                val request = builder.build()
                 captureSession?.setRepeatingRequest(request, null, backgroundHandler)
             }
         } catch (e: Exception) {
-            Log.e("CameraHelper", "Failed to set Flash", e)
+            Log.e("CameraHelper", "Failed to set Flash mode", e)
         }
+    }
+    
+    fun toggleFlash(isOn: Boolean) {
+        updateFlashMode(if (isOn) 2 else 0) // 2 is Torch, 0 is Off
     }
     
     fun toggleFrontBackCamera(textureView: TextureView) {
@@ -921,17 +1154,55 @@ class CameraManagerHelper(private val context: Context) {
     fun captureImage() {
         try {
             val captureBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE) ?: return
-            pictureReader?.surface?.let { captureBuilder.addTarget(it) }
-            
             val settings = SettingsManager.getInstance(context)
+            
+            var targetAdded = false
+            pictureReader?.surface?.let { 
+                captureBuilder.addTarget(it)
+                targetAdded = true
+            }
+            rawReader?.surface?.let { 
+                captureBuilder.addTarget(it)
+                targetAdded = true
+            }
+            
+            if (!targetAdded) {
+                Log.e("CameraHelper", "No surface targets available for capture!")
+                Handler(context.mainLooper).post { onPictureSaved?.invoke(false) }
+                return
+            }
+            
             val isManual = settings.lastUsedMode == 1
             
             if (isManual && (!settings.isIsoAuto || !settings.isShutterAuto)) {
                 captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso.coerceIn(minIso, maxIso))
-                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentShutter.coerceIn(minShutter, maxShutter))
+                val targetIso = manualIso ?: currentIso.coerceIn(minIso, maxIso)
+                val targetShutter = manualShutter ?: currentShutter.coerceIn(minShutter, maxShutter)
+                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, targetIso)
+                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, targetShutter)
+                
+                if (settings.flashMode == 1) {
+                    captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_SINGLE)
+                } else if (settings.flashMode == 2) {
+                    captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
+                } else {
+                    captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
+                }
             } else {
-                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                when (settings.flashMode) {
+                    1 -> {
+                        captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH)
+                        captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_SINGLE)
+                    }
+                    2 -> {
+                        captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                        captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_TORCH)
+                    }
+                    else -> {
+                        captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                        captureBuilder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
+                    }
+                }
             }
             
             captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, captureRequestBuilder?.get(CaptureRequest.CONTROL_AF_MODE))
@@ -963,6 +1234,7 @@ class CameraManagerHelper(private val context: Context) {
             captureSession?.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
                     super.onCaptureStarted(session, request, timestamp, frameNumber)
+                    Log.d("CameraHelper", "Capture started, timestamp=$timestamp")
                     val exposureNs = request.get(CaptureRequest.SENSOR_EXPOSURE_TIME) ?: currentShutter
                     var exposureMs = exposureNs / 1_000_000L
                     
@@ -979,11 +1251,116 @@ class CameraManagerHelper(private val context: Context) {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
                     Log.d("CameraHelper", "Capture completed")
+                    
+                    val settings = SettingsManager.getInstance(context)
+                    if (settings.photoFormat.contains("RAW")) {
+                        val ts = result.get(CaptureResult.SENSOR_TIMESTAMP)
+                        Log.d("CameraHelper", "RAW capture completed, SENSOR_TIMESTAMP=$ts")
+                        if (ts != null) {
+                            rawResultsMap[ts] = result
+                            checkAndSaveRawMatched(ts)
+                        } else {
+                            Log.e("CameraHelper", "SENSOR_TIMESTAMP is null in capture result!")
+                        }
+                    }
+                }
+                override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: android.hardware.camera2.CaptureFailure) {
+                    super.onCaptureFailed(session, request, failure)
+                    Log.e("CameraHelper", "Capture FAILED, reason=${failure.reason}")
+                    Handler(context.mainLooper).post {
+                        onPictureSaved?.invoke(false)
+                    }
                 }
             }, backgroundHandler)
             
         } catch (e: Exception) {
-            Log.e("CameraHelper", "Error capturing image", e)
+            Log.e("CameraHelper", "Error capturing image: ${e.message}", e)
+            Handler(context.mainLooper).post {
+                onPictureSaved?.invoke(false)
+            }
+        }
+    }
+    
+    fun captureBurst(count: Int = 10) {
+        try {
+            val captureBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE) ?: return
+            val settings = SettingsManager.getInstance(context)
+            
+            var targetAdded = false
+            pictureReader?.surface?.let { 
+                captureBuilder.addTarget(it)
+                targetAdded = true
+            }
+            rawReader?.surface?.let { 
+                captureBuilder.addTarget(it)
+                targetAdded = true
+            }
+            
+            if (!targetAdded) return
+            
+            val isManual = settings.lastUsedMode == 1
+            if (isManual && (!settings.isIsoAuto || !settings.isShutterAuto)) {
+                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                val targetIso = manualIso ?: currentIso.coerceIn(minIso, maxIso)
+                val targetShutter = manualShutter ?: currentShutter.coerceIn(minShutter, maxShutter)
+                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, targetIso)
+                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, targetShutter)
+            } else {
+                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            }
+            
+            // Apply Manual WB to capture request as well
+            if (manualWbMode == "AWB") {
+                captureBuilder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+            } else {
+                captureBuilder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+                val gains = com.example.optik.settings.WhitebalanceHelper.colorTemperatureToRggb(manualKelvin, manualTintAB, manualTintGM)
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_GAINS, gains)
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, android.hardware.camera2.params.ColorSpaceTransform(intArrayOf(
+                    1, 1, 0, 1, 0, 1,
+                    0, 1, 1, 1, 0, 1,
+                    0, 1, 0, 1, 1, 1
+                )))
+            }
+            
+            captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, captureRequestBuilder?.get(CaptureRequest.CONTROL_AF_MODE))
+            
+            val cameraId = currentCameraId ?: return
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+            val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            val jpegOrientation = if (isFrontCamera) {
+                (sensorOrientation - currentDeviceOrientation + 360) % 360
+            } else {
+                (sensorOrientation + currentDeviceOrientation + 360) % 360
+            }
+            lastJpegOrientation = jpegOrientation
+            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation)
+            
+            val request = captureBuilder.build()
+            val requestList = List(count) { request }
+            
+            captureSession?.captureBurst(requestList, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber)
+                    Handler(context.mainLooper).post {
+                        onCaptureStarted?.invoke(100L) // fake short exposure for burst UI animation
+                    }
+                }
+                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                    super.onCaptureCompleted(session, request, result)
+                    if (settings.photoFormat.contains("RAW")) {
+                        val ts = result.get(CaptureResult.SENSOR_TIMESTAMP)
+                        if (ts != null) {
+                            rawResultsMap[ts] = result
+                            checkAndSaveRawMatched(ts)
+                        }
+                    }
+                }
+            }, backgroundHandler)
+            
+        } catch (e: Exception) {
+            Log.e("CameraHelper", "Error capturing burst", e)
             Handler(context.mainLooper).post {
                 onPictureSaved?.invoke(false)
             }
@@ -993,26 +1370,8 @@ class CameraManagerHelper(private val context: Context) {
     private fun getNextFileName(isVideo: Boolean): String {
         val prefix = if (isVideo) "VID_" else "IMG_"
         val extension = if (isVideo) ".mp4" else ".jpg"
-        
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Optik")
-        if (!dir.exists()) dir.mkdirs()
-        
-        var maxIndex = 0
-        val files = dir.listFiles()
-        if (files != null) {
-            for (file in files) {
-                val name = file.name
-                if (name.startsWith(prefix) && name.endsWith(extension)) {
-                    val numberPart = name.substring(4, name.length - extension.length)
-                    val num = numberPart.toIntOrNull()
-                    if (num != null && num > maxIndex) {
-                        maxIndex = num
-                    }
-                }
-            }
-        }
-        val nextIndex = maxIndex + 1
-        return String.format("%s%04d%s", prefix, nextIndex, extension)
+        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US)
+        return prefix + sdf.format(java.util.Date()) + extension
     }
 
     private fun saveImageBytes(bytes: ByteArray) {
@@ -1114,6 +1473,40 @@ class CameraManagerHelper(private val context: Context) {
                         outputStream.write(finalBytes)
                     }
                     outputStream.close()
+                    
+                    // Update EXIF metadata
+                    try {
+                        val pfd = resolver.openFileDescriptor(it, "rw")
+                        if (pfd != null) {
+                            val exif = android.media.ExifInterface(pfd.fileDescriptor)
+                            
+                            // Snap ISO to standard value
+                            val isoStr = exif.getAttribute(android.media.ExifInterface.TAG_ISO_SPEED_RATINGS)
+                            if (isoStr != null) {
+                                val iso = isoStr.toIntOrNull()
+                                if (iso != null) {
+                                    val stdIso = com.example.optik.settings.ExposureHelper.snapToStandardIso(iso)
+                                    exif.setAttribute(android.media.ExifInterface.TAG_ISO_SPEED_RATINGS, stdIso.toString())
+                                }
+                            }
+                            
+                            // Snap Shutter to standard value
+                            val shutterStr = exif.getAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME)
+                            if (shutterStr != null) {
+                                val shutterSec = shutterStr.toDoubleOrNull()
+                                if (shutterSec != null) {
+                                    val shutterNs = (shutterSec * 1_000_000_000).toLong()
+                                    val stdShutter = com.example.optik.settings.ExposureHelper.formatShutterExif(shutterNs)
+                                    exif.setAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME, stdShutter)
+                                }
+                            }
+                            
+                            exif.saveAttributes()
+                            pfd.close()
+                        }
+                    } catch (ex: Exception) {
+                        Log.e("CameraHelper", "Failed to update EXIF", ex)
+                    }
                 }
                 
                 Handler(context.mainLooper).post {
@@ -1339,6 +1732,15 @@ class CameraManagerHelper(private val context: Context) {
         }
     }
 
+    fun updateFocusMode(mode: Int, distance: Float) {
+        val settings = SettingsManager.getInstance(context)
+        settings.focusMode = mode
+        if (mode == 1) {
+            settings.manualFocusDistance = distance
+        }
+        applyCurrentSettingsAndUpdate()
+    }
+
     fun closeCamera() {
         orientationEventListener?.disable()
         if (isRecording) {
@@ -1352,5 +1754,94 @@ class CameraManagerHelper(private val context: Context) {
         imageReader = null
         pictureReader?.close()
         pictureReader = null
+        rawReader?.close()
+        rawReader = null
+        
+        rawImagesMap.values.forEach { it.close() }
+        rawImagesMap.clear()
+        rawResultsMap.clear()
+    }
+
+    private var yuvBytes: ByteArray? = null
+
+    fun calculateManualEv(image: android.media.Image) {
+        if (image.format != ImageFormat.YUV_420_888) return
+        val yPlane = image.planes[0]
+        val buffer = yPlane.buffer
+        val width = image.width
+        val height = image.height
+        val rowStride = yPlane.rowStride
+        val pixelStride = yPlane.pixelStride
+
+        val capacity = buffer.remaining()
+        if (yuvBytes == null || yuvBytes!!.size < capacity) {
+            yuvBytes = ByteArray(capacity)
+        }
+        buffer.get(yuvBytes!!, 0, capacity)
+
+        var totalLuma: Long = 0
+        var count = 0
+
+        val startX = when(meteringMode) { 2 -> width/2 - width/20; 1 -> width/2 - (width*0.15).toInt(); else -> 0 }
+        val endX = when(meteringMode) { 2 -> width/2 + width/20; 1 -> width/2 + (width*0.15).toInt(); else -> width }
+        val startY = when(meteringMode) { 2 -> height/2 - height/20; 1 -> height/2 - (height*0.15).toInt(); else -> 0 }
+        val endY = when(meteringMode) { 2 -> height/2 + height/20; 1 -> height/2 + (height*0.15).toInt(); else -> height }
+
+        val step = 8 
+        for (y in startY until endY step step) {
+            val rowStart = y * rowStride
+            for (x in startX until endX step step) {
+                val index = rowStart + x * pixelStride
+                if (index < capacity) {
+                    val luma = yuvBytes!![index].toInt() and 0xFF
+                    totalLuma += luma
+                    count++
+                }
+            }
+        }
+        
+        if (count > 0) {
+            val avgLuma = totalLuma.toFloat() / count
+            val ev = (Math.log(avgLuma.toDouble() / 118.0) / Math.log(2.0)).toFloat()
+            val finalEv = ev.coerceIn(-2.0f, 2.0f)
+            this.currentCalculatedEv = finalEv
+            
+            Handler(android.os.Looper.getMainLooper()).post {
+                onEvCalculated?.invoke(finalEv)
+            }
+        }
+    }
+
+    fun updateManualIso(iso: Int?) {
+        manualIso = iso
+        applyCurrentSettingsAndUpdate()
+    }
+    
+    fun updateManualWb(mode: String, kelvin: Int, ab: Int, gm: Int) {
+        manualWbMode = mode
+        manualKelvin = kelvin
+        manualTintAB = ab
+        manualTintGM = gm
+        applyCurrentSettingsAndUpdate()
+    }
+    
+    fun updateManualShutter(shutterNs: Long?) {
+        manualShutter = shutterNs
+        applyCurrentSettingsAndUpdate()
+    }
+    
+    fun updateMeteringMode(mode: Int) {
+        meteringMode = mode
+        applyCurrentSettingsAndUpdate()
+    }
+    
+    private fun applyCurrentSettingsAndUpdate() {
+        val builder = captureRequestBuilder ?: return
+        applyCurrentSettings()
+        try {
+            captureSession?.setRepeatingRequest(builder.build(), previewCaptureCallback, backgroundHandler)
+        } catch (e: Exception) {
+            Log.e("CameraHelper", "Error applying manual settings", e)
+        }
     }
 }

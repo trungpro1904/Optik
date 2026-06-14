@@ -77,12 +77,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        setupRow(binding.rowRawCompression.root, "Nén ảnh RAW", settings.rawCompression) {
-            showBottomSheet("Nén ảnh RAW", "Ảnh RAW chứa lượng thông tin rất lớn mà cảm biến thu nhận được, chọn nén hoặc không phù hợp sẽ giảm tải bộ nhớ.", listOf("Không nén", "Nén không mất mát", "Nén"), settings.rawCompression) {
-                settings.rawCompression = it
-                updateRowValue(binding.rowRawCompression.root, it)
-            }
-        }
+
 
         setupRow(binding.rowVideoFormat.root, "Định dạng video mặc định", settings.videoFormat) {
             showBottomSheet("Định dạng video mặc định", "Độ phân giải video và tốc độ khung hình tỷ lệ thuận với kích thước file video.\n*Lưu ý rằng việc quay video với độ phân giải lớn và FPS cao có thể làm nóng máy.", listOf("4K", "HD", "720p"), settings.videoFormat) {
@@ -105,9 +100,9 @@ class SettingsActivity : AppCompatActivity() {
 
         setupSwitch(binding.rowHaptic.root, "Rung?", true) { }
 
-        setupRow(binding.rowStartupMode.root, "Chế độ chụp khởi chạy", if (settings.startupMode == 0) "Luôn dùng chế độ Basic" else "CĐ chụp trước") {
-            showBottomSheet("Chế độ chụp khởi chạy", "", listOf("CĐ chụp trước", "Luôn dùng chế độ Basic"), if (settings.startupMode == 0) "Luôn dùng chế độ Basic" else "CĐ chụp trước") {
-                settings.startupMode = if (it == "CĐ chụp trước") 2 else 0
+        setupRow(binding.rowStartupMode.root, "Chế độ chụp khởi chạy", if (settings.startupMode == 0) "Luôn dùng chế độ Basic" else "Như hiện tại") {
+            showBottomSheet("Chế độ chụp khởi chạy", "Như hiện tại: Khi mở app sẽ hiển thị chế độ cuối cùng bạn sử dụng.\nLuôn dùng chế độ Basic: Luôn mở chế độ Basic khi khởi động lại app.", listOf("Như hiện tại", "Luôn dùng chế độ Basic"), if (settings.startupMode == 0) "Luôn dùng chế độ Basic" else "Như hiện tại") {
+                settings.startupMode = if (it == "Như hiện tại") 2 else 0
                 updateRowValue(binding.rowStartupMode.root, it)
             }
         }
@@ -126,7 +121,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        setupSwitch(binding.rowShutterSound.root, "Âm thanh chụp", true) { }
+        setupSwitch(binding.rowShutterSound.root, "Âm thanh chụp", settings.isShutterSoundEnabled) { settings.isShutterSoundEnabled = it }
         
         binding.btnGuide.setOnClickListener {
             // Show guide
