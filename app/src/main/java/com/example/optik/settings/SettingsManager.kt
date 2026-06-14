@@ -119,4 +119,40 @@ class SettingsManager private constructor(context: Context) {
     var manualFocusDistance: Float
         get() = prefs.getFloat("manualFocusDistance", 0.0f) // 0.0f is infinity
         set(value) = prefs.edit().putFloat("manualFocusDistance", value).apply()
+
+    // EV Compensation
+    var evCompensation: Float
+        get() = prefs.getFloat("evCompensation", 0.0f)
+        set(value) = prefs.edit().putFloat("evCompensation", value).apply()
+
+    // WB Settings
+    var manualWbMode: String
+        get() = prefs.getString("manualWbMode", "AWB") ?: "AWB"
+        set(value) = prefs.edit().putString("manualWbMode", value).apply()
+
+    var manualKelvin: Int
+        get() = prefs.getInt("manualKelvin", 5500)
+        set(value) = prefs.edit().putInt("manualKelvin", value).apply()
+
+    var manualTintAB: Int
+        get() = prefs.getInt("manualTintAB", 0)
+        set(value) = prefs.edit().putInt("manualTintAB", value).apply()
+
+    var manualTintGM: Int
+        get() = prefs.getInt("manualTintGM", 0)
+        set(value) = prefs.edit().putInt("manualTintGM", value).apply()
+
+    // Metering Mode: 0 = Matrix, 1 = Center, 2 = Spot
+    var meteringMode: Int
+        get() = prefs.getInt("meteringMode", 0)
+        set(value) = prefs.edit().putInt("meteringMode", value).apply()
+
+    // Manual ISO and Shutter precise values
+    var manualIsoValue: Int
+        get() = prefs.getInt("manualIsoValue", 100)
+        set(value) = prefs.edit().putInt("manualIsoValue", value).apply()
+
+    var manualShutterValue: Long
+        get() = prefs.getLong("manualShutterValue", 10000000L) // default 1/100s
+        set(value) = prefs.edit().putLong("manualShutterValue", value).apply()
 }

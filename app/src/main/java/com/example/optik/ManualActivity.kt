@@ -237,22 +237,29 @@ class ManualActivity : AppCompatActivity() {
             }
         }
 
+    var lastAiProcessTime = 0L
+
         cameraHelper.onImageAvailable = { image ->
-            try {
-                if (binding.previewArea.width > 0) {
-                    val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
-                    val bitmap = binding.previewArea.getBitmap(640, h)
-                    if (bitmap != null) {
-                        objectTracker.processBitmap(bitmap, currentRotation.toInt())
-                        try {
-                            val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
-                            faceTracker.processImage(mpImage, currentRotation.toInt(), android.os.SystemClock.uptimeMillis())
-                        } catch (e: Exception) {}
+            val currentTime = android.os.SystemClock.uptimeMillis()
+            if (currentTime - lastAiProcessTime > 100) {
+                lastAiProcessTime = currentTime
+                try {
+                    if (binding.previewArea.width > 0) {
+                        val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
+                        val bitmap = binding.previewArea.getBitmap(640, h)
+                        if (bitmap != null) {
+                            objectTracker.processBitmap(bitmap, currentRotation.toInt())
+                            try {
+                                val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
+                                faceTracker.processImage(mpImage, currentRotation.toInt(), android.os.SystemClock.uptimeMillis())
+                            } catch (e: Exception) {}
+                        }
                     }
-                }
-            } catch (e: Exception) {}
+                } catch (e: Exception) {}
+            }
         }
 
+        loadQuickSettings()
         setupUI()
         setupInfoBar()
         setupOrientationListener()
@@ -272,6 +279,51 @@ class ManualActivity : AppCompatActivity() {
             
             levelRoll?.isVertical = false
             levelRoll?.angle = roll
+        }
+    }
+
+    private fun loadQuickSettings() {
+        val settings = SettingsManager.getInstance(this)
+        
+        currentWbMode = settings.manualWbMode
+        if (currentWbMode == "K1") {
+            k1Kelvin = settings.manualKelvin
+            k1TintAB = settings.manualTintAB
+            k1TintGM = settings.manualTintGM
+        } else if (currentWbMode == "K2") {
+            k2Kelvin = settings.manualKelvin
+            k2TintAB = settings.manualTintAB
+            k2TintGM = settings.manualTintGM
+        } else if (currentWbMode == "C1") {
+            c1TintAB = settings.manualTintAB
+            c1TintGM = settings.manualTintGM
+        } else if (currentWbMode == "C2") {
+            c2TintAB = settings.manualTintAB
+            c2TintGM = settings.manualTintGM
+        }
+        
+        binding.quickSettings.tvWbQuickVal.text = currentWbMode
+        
+        val meteringIcon = when(settings.meteringMode) { 1 -> R.drawable.center; 2 -> R.drawable.spot; else -> R.drawable.area_meter }
+        val iconViewQuick = binding.quickSettings.btnMetering.getChildAt(0) as? android.widget.ImageView
+        iconViewQuick?.setImageResource(meteringIcon)
+        
+        if (!settings.isIsoAuto) {
+            val isoStr = com.example.optik.settings.ExposureHelper.formatIso(settings.manualIsoValue)
+            binding.quickSettings.tvIsoQuickVal.text = isoStr
+            binding.tvIso.text = "ISO $isoStr"
+        }
+        
+        if (!settings.isShutterAuto) {
+            val sStr = com.example.optik.settings.ExposureHelper.formatShutterSpeed(settings.manualShutterValue)
+            binding.quickSettings.tvShutterQuickVal.text = sStr
+            binding.tvShutter.text = sStr
+        }
+        
+        if (settings.focusMode == 1) {
+            binding.quickSettings.tvFocusQuickVal.text = "MF"
+        } else {
+            binding.quickSettings.tvFocusQuickVal.text = "AF"
         }
     }
 
@@ -476,7 +528,7 @@ class ManualActivity : AppCompatActivity() {
             runOnUiThread { 
                 maxCameraMp = sizes.maxOfOrNull { it.width * it.height / 1_000_000 } ?: 12
                 val btnRes = binding.tvMp
-                btnRes?.text = SettingsManager.getInstance(this@ManualActivity).photoResolution.ifEmpty { "12mp" }
+                btnRes.text = SettingsManager.getInstance(this@ManualActivity).photoResolution.ifEmpty { "12mp" }
             } 
         }
 
@@ -607,7 +659,7 @@ class ManualActivity : AppCompatActivity() {
 
         binding.btnAlbum.setOnClickListener {
             if (isCapturing) return@setOnClickListener
-            if (binding.albumProgress?.visibility == View.VISIBLE) {
+            if (binding.albumProgress.visibility == View.VISIBLE) {
                 android.widget.Toast.makeText(this, "Đang xử lý ảnh...", android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -1019,7 +1071,7 @@ class ManualActivity : AppCompatActivity() {
         binding.panelContainer.visibility = View.INVISIBLE
         binding.ratioSelectionPanel.visibility = View.GONE
         binding.evAdjustmentPanel.visibility = View.GONE
-        binding.manualSettingsPanelInclude.wbModeContainer?.visibility = View.GONE
+        binding.manualSettingsPanelInclude.wbModeContainer.visibility = View.GONE
         
         val panel = binding.manualSettingsPanelInclude.root
         panel.visibility = View.VISIBLE
@@ -1060,7 +1112,7 @@ class ManualActivity : AppCompatActivity() {
             5 -> { // Drive Mode
                 containerOptions.visibility = android.view.View.VISIBLE
                 pickerContainer.visibility = android.view.View.GONE
-                binding.manualSettingsPanelInclude.focusSliderContainer?.visibility = android.view.View.GONE
+                binding.manualSettingsPanelInclude.focusSliderContainer.visibility = android.view.View.GONE
                 populateDriveModeOptions(containerOptions)
             }
             6 -> { // Focus
@@ -1068,8 +1120,8 @@ class ManualActivity : AppCompatActivity() {
             }
             7 -> { // WB
                 containerOptions.visibility = View.GONE
-                binding.manualSettingsPanelInclude.focusSliderContainer?.visibility = View.GONE
-                binding.manualSettingsPanelInclude.wbModeContainer?.visibility = View.VISIBLE
+                binding.manualSettingsPanelInclude.focusSliderContainer.visibility = View.GONE
+                binding.manualSettingsPanelInclude.wbModeContainer.visibility = View.VISIBLE
                 setupWbPanel(pickerContainer, rvPicker)
             }
         }
@@ -1082,10 +1134,10 @@ class ManualActivity : AppCompatActivity() {
     private fun closeSettingsPanel() {
         isSettingsPanelOpen = false
         binding.manualSettingsPanelInclude.root.visibility = android.view.View.GONE
-        binding.wbGridContainer?.visibility = View.GONE
+        binding.wbGridContainer.visibility = View.GONE
         binding.infoBar.visibility = android.view.View.VISIBLE
         binding.panelContainer.visibility = android.view.View.VISIBLE
-        binding.manualSettingsPanelInclude.focusSliderContainer?.visibility = android.view.View.GONE
+        binding.manualSettingsPanelInclude.focusSliderContainer.visibility = android.view.View.GONE
     }
 
     private fun populateFocusOptions() {
@@ -1159,11 +1211,11 @@ class ManualActivity : AppCompatActivity() {
             
             // Toggle Grid
             if (currentWbMode == "AWB") {
-                binding.wbGridContainer?.visibility = View.GONE
+                binding.wbGridContainer.visibility = View.GONE
                 pickerContainer.visibility = View.GONE
                 cameraHelper.updateManualWb("AWB", 0, 0, 0)
             } else {
-                binding.wbGridContainer?.visibility = View.VISIBLE
+                binding.wbGridContainer.visibility = View.VISIBLE
                 // Toggle Slider
                 if (currentWbMode == "K1" || currentWbMode == "K2") {
                     pickerContainer.visibility = View.VISIBLE
@@ -1175,8 +1227,8 @@ class ManualActivity : AppCompatActivity() {
                 // Set Grid Values
                 val ab = when(currentWbMode) { "K1" -> k1TintAB; "K2" -> k2TintAB; "C1" -> c1TintAB; else -> c2TintAB }
                 val gm = when(currentWbMode) { "K1" -> k1TintGM; "K2" -> k2TintGM; "C1" -> c1TintGM; else -> c2TintGM }
-                binding.wbGrid?.setTint(ab, gm)
-                binding.tvWbTintInfo?.text = "AB: $ab   GM: $gm"
+                binding.wbGrid.setTint(ab, gm)
+                binding.tvWbTintInfo.text = "AB: $ab   GM: $gm"
                 
                 applyWbToCamera()
             }
@@ -1190,8 +1242,8 @@ class ManualActivity : AppCompatActivity() {
         }
         
         // Listen to Grid changes
-        binding.wbGrid?.onTintChangedListener = { ab, gm ->
-            binding.tvWbTintInfo?.text = "AB: $ab   GM: $gm"
+        binding.wbGrid.onTintChangedListener = { ab, gm ->
+            binding.tvWbTintInfo.text = "AB: $ab   GM: $gm"
             when(currentWbMode) {
                 "K1" -> { k1TintAB = ab; k1TintGM = gm }
                 "K2" -> { k2TintAB = ab; k2TintGM = gm }
@@ -1283,6 +1335,7 @@ class ManualActivity : AppCompatActivity() {
             
             item.setOnClickListener {
                 cameraHelper.updateMeteringMode(modes[i])
+                SettingsManager.getInstance(this@ManualActivity).meteringMode = modes[i]
                 val iconViewQuick = binding.quickSettings.btnMetering.getChildAt(0) as? android.widget.ImageView
                 iconViewQuick?.setImageResource(icons[i])
                 closeSettingsPanel()
@@ -1309,7 +1362,7 @@ class ManualActivity : AppCompatActivity() {
             } catch (e: IllegalStateException) {}
         }
         
-        rv.post {
+        val setupLogic = {
             val rvWidth = rv.width
             val itemWidth = if (rvWidth > 0) rvWidth / 3 else 300 // fallback
             rv.setPadding(itemWidth, 0, itemWidth, 0)
@@ -1386,9 +1439,33 @@ class ManualActivity : AppCompatActivity() {
                     }
                 }
             })
-            // trigger initial alpha
-            rv.scrollBy(1, 0)
-            rv.scrollBy(-1, 0)
+            // trigger initial alpha without firing scroll event
+            rv.post {
+                val centerX = rv.width / 2f
+                for (i in 0 until rv.childCount) {
+                    val child = rv.getChildAt(i)
+                    val childCenterX = child.left + child.width / 2f
+                    val distance = Math.abs(centerX - childCenterX)
+                    val fraction = 1f - Math.min(1f, distance / child.width)
+                    child.alpha = 0.4f + 0.6f * fraction
+                    val scale = 0.8f + 0.2f * fraction
+                    child.scaleX = scale
+                    child.scaleY = scale
+                }
+            }
+        }
+        
+        if (rv.width > 0) {
+            setupLogic()
+        } else {
+            rv.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    if (rv.width > 0) {
+                        rv.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        setupLogic()
+                    }
+                }
+            })
         }
     }
 
@@ -1410,6 +1487,7 @@ class ManualActivity : AppCompatActivity() {
                 binding.quickSettings.tvIsoQuickVal.text = "AUTO"
             } else {
                 settings.isIsoAuto = false
+                settings.manualIsoValue = isoStr.toInt()
                 cameraHelper.updateManualIso(isoStr.toInt())
                 binding.tvIso.text = "ISO $isoStr"
                 binding.quickSettings.tvIsoQuickVal.text = isoStr
@@ -1439,6 +1517,7 @@ class ManualActivity : AppCompatActivity() {
                 binding.quickSettings.tvShutterQuickVal.text = "AUTO"
             } else {
                 settings.isShutterAuto = false
+                settings.manualShutterValue = stdShutterNs[pos - 1]
                 cameraHelper.updateManualShutter(stdShutterNs[pos - 1])
                 binding.tvShutter.text = shutterStr
                 binding.quickSettings.tvShutterQuickVal.text = shutterStr

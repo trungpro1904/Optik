@@ -249,23 +249,28 @@ class BasicActivity : AppCompatActivity() {
                 }
             }
         }
+        var lastAiProcessTime = 0L
 
         cameraHelper.onImageAvailable = { image ->
-            try {
-                if (binding.previewArea.width > 0) {
-                    val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
-                    val bitmap = binding.previewArea.getBitmap(640, h)
-                    if (bitmap != null) {
-                        objectTracker.processBitmap(bitmap, currentRotation.toInt())
-                        try {
-                            val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
-                            val mpRotation = (360 - currentRotation.toInt()) % 360
-                            faceTracker.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
-                            gestureTracker?.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
-                        } catch (e: Exception) {}
+            val currentTime = android.os.SystemClock.uptimeMillis()
+            if (currentTime - lastAiProcessTime > 100) {
+                lastAiProcessTime = currentTime
+                try {
+                    if (binding.previewArea.width > 0) {
+                        val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
+                        val bitmap = binding.previewArea.getBitmap(640, h)
+                        if (bitmap != null) {
+                            objectTracker.processBitmap(bitmap, currentRotation.toInt())
+                            try {
+                                val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
+                                val mpRotation = (360 - currentRotation.toInt()) % 360
+                                faceTracker.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
+                                gestureTracker?.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
+                            } catch (e: Exception) {}
+                        }
                     }
-                }
-            } catch (e: Exception) {}
+                } catch (e: Exception) {}
+            }
         }
 
         val levelPitch = findViewById<com.example.optik.view.LevelIndicatorView>(R.id.level_pitch)

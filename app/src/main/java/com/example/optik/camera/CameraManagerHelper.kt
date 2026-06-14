@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION")
 package com.example.optik.camera
 
 import android.annotation.SuppressLint
@@ -104,6 +105,23 @@ class CameraManagerHelper(private val context: Context) {
     var manualKelvin: Int = 5500
     var manualTintAB: Int = 0
     var manualTintGM: Int = 0
+    
+    init {
+        val settings = SettingsManager.getInstance(context)
+        currentEvCompensation = settings.evCompensation
+        manualWbMode = settings.manualWbMode
+        manualKelvin = settings.manualKelvin
+        manualTintAB = settings.manualTintAB
+        manualTintGM = settings.manualTintGM
+        meteringMode = settings.meteringMode
+        
+        if (!settings.isIsoAuto) {
+            manualIso = settings.manualIsoValue
+        }
+        if (!settings.isShutterAuto) {
+            manualShutter = settings.manualShutterValue
+        }
+    }
     
     var onEvCalculated: ((Float) -> Unit)? = null
     private var evCalculationCounter = 0
@@ -468,7 +486,9 @@ class CameraManagerHelper(private val context: Context) {
         val builder = captureRequestBuilder ?: return
         
         val settings = SettingsManager.getInstance(context)
-        if (settings.focusMode == 1) { // MF
+        val isManualMode = settings.lastUsedMode == 1
+        
+        if (isManualMode && settings.focusMode == 1) { // MF
             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
             builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, settings.manualFocusDistance)
         } else { // AF
@@ -476,7 +496,7 @@ class CameraManagerHelper(private val context: Context) {
         }
         
         // Manual WB
-        if (manualWbMode == "AWB") {
+        if (!isManualMode || manualWbMode == "AWB") {
             builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
         } else {
             builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
@@ -490,7 +510,7 @@ class CameraManagerHelper(private val context: Context) {
             )))
         }
         
-        if (manualIso != null && manualShutter != null) {
+        if (isManualMode && manualIso != null && manualShutter != null) {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             builder.set(CaptureRequest.SENSOR_SENSITIVITY, manualIso)
             // Giới hạn thời gian phơi sáng của preview tối đa 1/30s để không bị đứng khung hình
@@ -512,10 +532,10 @@ class CameraManagerHelper(private val context: Context) {
                     builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
                 }
             }
-            if (manualIso != null) {
+            if (isManualMode && manualIso != null) {
                 builder.set(CaptureRequest.SENSOR_SENSITIVITY, manualIso)
             }
-            if (manualShutter != null) {
+            if (isManualMode && manualShutter != null) {
                 val previewShutter = manualShutter!!.coerceAtMost(33_333_333L)
                 builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewShutter)
             }
@@ -523,7 +543,8 @@ class CameraManagerHelper(private val context: Context) {
         
         val sensorRect = sensorArraySize
         if (sensorRect != null) {
-            val meteringRect = when (meteringMode) {
+            val actualMeteringMode = if (isManualMode) meteringMode else 0
+            val meteringRect = when (actualMeteringMode) {
                 2 -> { // Spot (10% center)
                     val w = sensorRect.width() / 10
                     val h = sensorRect.height() / 10
@@ -543,7 +564,8 @@ class CameraManagerHelper(private val context: Context) {
         val range = aeCompensationRange
         val step = aeCompensationStep
         if (range != null && step != null) {
-            val compensation = (currentEvCompensation / step.toFloat()).toInt()
+            val evToApply = if (isManualMode) currentEvCompensation else 0f
+            val compensation = (evToApply / step.toFloat()).toInt()
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, compensation.coerceIn(range.lower, range.upper))
         }
         
@@ -589,6 +611,7 @@ class CameraManagerHelper(private val context: Context) {
 
     fun setExposureCompensation(ev: Float) {
         currentEvCompensation = ev
+        SettingsManager.getInstance(context).evCompensation = ev
         val builder = captureRequestBuilder ?: return
         val range = aeCompensationRange ?: return
         val step = aeCompensationStep ?: return
@@ -1709,7 +1732,7 @@ class CameraManagerHelper(private val context: Context) {
                 
                 val resolutions = JSONArray()
                 sizes?.forEach { size ->
-                    val minDuration = map?.getOutputMinFrameDuration(format, size) ?: 0L
+                    val minDuration = map.getOutputMinFrameDuration(format, size)
                     val maxFps = if (minDuration > 0) (1_000_000_000L / minDuration).toInt() else 0
                     
                     val resObj = JSONObject()
