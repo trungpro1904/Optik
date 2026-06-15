@@ -756,7 +756,7 @@ class BasicActivity : AppCompatActivity() {
                 }, 250)
             }
             override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) {
-                cameraHelper.updateDisplaySurface(android.view.Surface(s))
+                cameraHelper.updateDisplaySurfaceSize()
             }
             override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean = true
             override fun onSurfaceTextureUpdated(s: android.graphics.SurfaceTexture) {}

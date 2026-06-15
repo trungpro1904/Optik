@@ -944,6 +944,15 @@ class CameraManagerHelper(private val context: Context) {
                             Log.d("CameraHelper", "RAW image received, timestamp=$timestamp")
                             rawImagesMap[timestamp] = image
                             checkAndSaveRawMatched(timestamp)
+                            
+                            // Dọn dẹp rác để tránh lỗi maxImages (2)
+                            if (rawImagesMap.size > 1) {
+                                val oldest = rawImagesMap.keys.minOrNull()
+                                if (oldest != null && oldest != timestamp) {
+                                    Log.w("CameraHelper", "Dropping unmatched RAW image: $oldest")
+                                    rawImagesMap.remove(oldest)?.close()
+                                }
+                            }
                         } else {
                             Log.w("CameraHelper", "RAW acquireNextImage returned null")
                         }
@@ -1765,8 +1774,8 @@ class CameraManagerHelper(private val context: Context) {
         }
         applyCurrentSettingsAndUpdate()
     }
-    fun updateDisplaySurface(surface: Surface) {
-        glVideoProcessor.setDisplaySurface(surface)
+    fun updateDisplaySurfaceSize() {
+        glVideoProcessor.recreateDisplaySurface()
     }
 
     fun closeCamera() {

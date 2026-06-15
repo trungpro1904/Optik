@@ -362,7 +362,7 @@ class ManualActivity : AppCompatActivity() {
                 }, 250)
             }
             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-                cameraHelper.updateDisplaySurface(android.view.Surface(surface))
+                cameraHelper.updateDisplaySurfaceSize()
             }
             override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean = true
             override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {}

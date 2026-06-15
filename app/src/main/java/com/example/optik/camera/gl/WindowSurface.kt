@@ -8,7 +8,7 @@ import android.view.Surface
  *
  * It's good practice to explicitly release() the surface, preferably from a "finally" block.
  */
-class WindowSurface(private val eglCore: EglCore, private val surface: Surface, private val releaseSurface: Boolean) {
+class WindowSurface(private val eglCore: EglCore, val surface: Surface, private val releaseSurface: Boolean) {
 
     private var eglSurface: EGLSurface = eglCore.createWindowSurface(surface)
 

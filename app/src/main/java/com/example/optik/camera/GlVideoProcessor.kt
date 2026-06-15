@@ -40,14 +40,12 @@ class GlVideoProcessor(private val context: Context) {
             }
         }
 
+    private var isGlInitialized = false
+
     fun start() {
         val thread = HandlerThread("GlVideoProcessor").apply { start() }
         handlerThread = thread
         handler = Handler(thread.looper)
-
-        handler?.post {
-            initGL()
-        }
     }
 
     fun stop() {
@@ -59,10 +57,25 @@ class GlVideoProcessor(private val context: Context) {
 
     fun setDisplaySurface(surface: Surface) {
         handler?.post {
+            if (!isGlInitialized) {
+                initGL(surface)
+                isGlInitialized = true
+            } else {
+                displaySurface?.release()
+                eglCore?.let {
+                    displaySurface = WindowSurface(it, surface, false)
+                    displaySurface?.makeCurrent()
+                }
+            }
+        }
+    }
+
+    fun recreateDisplaySurface() {
+        handler?.post {
+            val currentSurface = displaySurface?.surface ?: return@post
             displaySurface?.release()
             eglCore?.let {
-                displaySurface = WindowSurface(it, surface, false)
-                // Phải make current 1 lần để đảm bảo context
+                displaySurface = WindowSurface(it, currentSurface, false)
                 displaySurface?.makeCurrent()
             }
         }
@@ -101,12 +114,11 @@ class GlVideoProcessor(private val context: Context) {
         }
     }
 
-    private fun initGL() {
+    private fun initGL(surface: Surface) {
         eglCore = EglCore(null, EglCore.FLAG_RECORDABLE)
         
-        // Cần 1 pbuffer surface tạm thời để có thể gọi hàm GL trước khi có display surface
-        val tempSurface = eglCore!!.createPbufferSurface(1, 1)
-        eglCore!!.makeCurrent(tempSurface)
+        displaySurface = WindowSurface(eglCore!!, surface, false)
+        displaySurface?.makeCurrent()
 
         lutFilter = GlLutFilter(context)
 
@@ -132,8 +144,6 @@ class GlVideoProcessor(private val context: Context) {
 
         // Camera sensor thường bị xoay hoặc lật, nhưng TransformMatrix từ SurfaceTexture đã lo việc xoay
         Matrix.setIdentityM(mvpMatrix, 0)
-        
-        eglCore!!.releaseSurface(tempSurface)
     }
 
     private fun drawFrame() {
@@ -201,5 +211,6 @@ class GlVideoProcessor(private val context: Context) {
 
         eglCore?.release()
         eglCore = null
+        isGlInitialized = false
     }
 }
