@@ -144,24 +144,29 @@ class GlVideoProcessor(private val context: Context) {
 
     fun setLut(assetFileName: String?) {
         handler?.post {
-            if (displaySurface != null) {
-                displaySurface!!.makeCurrent()
-            } else if (recordSurface != null) {
-                recordSurface!!.makeCurrent()
-            } else {
-                return@post
+            try {
+                if (displaySurface != null) {
+                    displaySurface!!.makeCurrent()
+                } else if (recordSurface != null) {
+                    recordSurface!!.makeCurrent()
+                } else {
+                    return@post
+                }
+                lutFilter?.loadLut(assetFileName)
+            } catch (e: Exception) {
+                Log.e("GlVideoProcessor", "Failed to setLut: ${e.message}")
             }
-            lutFilter?.loadLut(assetFileName)
         }
     }
 
     private fun initGL(surface: Surface) {
-        eglCore = EglCore(null, EglCore.FLAG_RECORDABLE)
-        
-        displaySurface = WindowSurface(eglCore!!, surface, false)
-        displaySurface?.makeCurrent()
+        try {
+            eglCore = EglCore(null, EglCore.FLAG_RECORDABLE)
+            
+            displaySurface = WindowSurface(eglCore!!, surface, false)
+            displaySurface?.makeCurrent()
 
-        lutFilter = GlLutFilter(context)
+            lutFilter = GlLutFilter(context)
 
         // Tạo OES texture cho camera
         val textures = IntArray(1)
@@ -189,6 +194,9 @@ class GlVideoProcessor(private val context: Context) {
 
         // Camera sensor thường bị xoay hoặc lật, nhưng TransformMatrix từ SurfaceTexture đã lo việc xoay
         Matrix.setIdentityM(mvpMatrix, 0)
+        } catch (e: Exception) {
+            Log.e("GlVideoProcessor", "Failed to initGL: ${e.message}")
+        }
     }
 
     private fun drawFrame() {

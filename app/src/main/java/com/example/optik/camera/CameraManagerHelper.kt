@@ -999,45 +999,49 @@ class CameraManagerHelper(private val context: Context) {
             glVideoProcessor.onInputSurfaceReady = { inputSurface ->
                 surfaces.add(inputSurface)
                 
-                cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        if (cameraDevice == null) return
-                        captureSession = session
-                        try {
-                            val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
-                            captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
-                            captureRequestBuilder?.addTarget(inputSurface)
-                            
-                            if (!isRecording) {
-                                if (onImageAvailable != null) {
-                                    imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
+                try {
+                    cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
+                            if (cameraDevice == null) return
+                            captureSession = session
+                            try {
+                                val template = if (isRecording) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
+                                captureRequestBuilder = cameraDevice?.createCaptureRequest(template)
+                                captureRequestBuilder?.addTarget(inputSurface)
+                                
+                                if (!isRecording) {
+                                    if (onImageAvailable != null) {
+                                        imageReader?.surface?.let { captureRequestBuilder?.addTarget(it) }
+                                    }
                                 }
+        
+                                captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                                captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                                
+                                captureRequestBuilder?.let { builder -> updateCropRegion(builder, settings.aspectRatio) }
+                                applyCurrentSettings()
+                                
+                                val request = captureRequestBuilder?.build()
+                                if (request != null) {
+                                    session.setRepeatingRequest(request, previewCaptureCallback, backgroundHandler)
+                                }
+        
+                                if (isRecording) {
+                                    mediaRecorder?.start()
+                                    glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
+                                }
+                            } catch (e: Exception) {
+                                Log.e("CameraHelper", "Error starting preview", e)
                             }
-    
-                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                            captureRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                            
-                            captureRequestBuilder?.let { builder -> updateCropRegion(builder, settings.aspectRatio) }
-                            applyCurrentSettings()
-                            
-                            val request = captureRequestBuilder?.build()
-                            if (request != null) {
-                                session.setRepeatingRequest(request, previewCaptureCallback, backgroundHandler)
-                            }
-    
-                            if (isRecording) {
-                                mediaRecorder?.start()
-                                glVideoProcessor.setRecordSurface(mediaRecorder?.surface)
-                            }
-                        } catch (e: Exception) {
-                            Log.e("CameraHelper", "Error starting preview", e)
                         }
-                    }
-    
-                    override fun onConfigureFailed(session: CameraCaptureSession) {
-                        Log.e("CameraHelper", "Configuration failed")
-                    }
-                }, backgroundHandler)
+        
+                        override fun onConfigureFailed(session: CameraCaptureSession) {
+                            Log.e("CameraHelper", "Configuration failed")
+                        }
+                    }, backgroundHandler)
+                } catch (e: Exception) {
+                    Log.e("CameraHelper", "Failed to createCaptureSession: ${e.message}")
+                }
             }
 
             // NOW trigger GL initialization — callback is already set above
