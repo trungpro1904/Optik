@@ -44,6 +44,7 @@ class GlVideoProcessor(private val context: Context) {
     private var isGlInitialized = false
 
     fun start() {
+        if (handlerThread != null && handlerThread!!.isAlive) return
         val thread = HandlerThread("GlVideoProcessor").apply { start() }
         handlerThread = thread
         handler = Handler(thread.looper)
@@ -52,8 +53,10 @@ class GlVideoProcessor(private val context: Context) {
     fun stop() {
         handler?.post {
             releaseGL()
-            handlerThread?.quitSafely()
         }
+        handlerThread?.quitSafely()
+        handlerThread = null
+        handler = null
     }
 
     fun setDisplaySurface(surface: Surface) {
