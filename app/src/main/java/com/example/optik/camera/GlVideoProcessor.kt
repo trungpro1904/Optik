@@ -30,10 +30,14 @@ class GlVideoProcessor(private val context: Context) {
     var videoOrientation: Int = 0
 
     // Listener để báo cho CameraManagerHelper biết Surface đã sẵn sàng
-    var onInputSurfaceReady: ((Surface) -> Unit)? = null
+    private var _onInputSurfaceReady: ((Surface) -> Unit)? = null
+    var onInputSurfaceReady: ((Surface) -> Unit)?
+        get() = _onInputSurfaceReady
         set(value) {
-            field = value
-            inputSurface?.let { value?.invoke(it) }
+            handler?.post {
+                _onInputSurfaceReady = value
+                inputSurface?.let { value?.invoke(it) }
+            }
         }
 
     fun start() {
@@ -77,7 +81,9 @@ class GlVideoProcessor(private val context: Context) {
     }
 
     fun setDefaultBufferSize(width: Int, height: Int) {
-        cameraSurfaceTexture?.setDefaultBufferSize(width, height)
+        handler?.post {
+            cameraSurfaceTexture?.setDefaultBufferSize(width, height)
+        }
     }
 
     fun setLut(assetFileName: String?) {
