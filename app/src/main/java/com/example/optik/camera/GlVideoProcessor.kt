@@ -31,6 +31,7 @@ class GlVideoProcessor(private val context: Context) {
     var videoOrientation: Int = 0
 
     // Listener để báo cho CameraManagerHelper biết Surface đã sẵn sàng
+    @Volatile
     private var _onInputSurfaceReady: ((Surface) -> Unit)? = null
     var onInputSurfaceReady: ((Surface) -> Unit)?
         get() = _onInputSurfaceReady
@@ -43,23 +44,50 @@ class GlVideoProcessor(private val context: Context) {
 
     private var isGlInitialized = false
 
+    /**
+     * Start the GL handler thread. Safe to call multiple times —
+     * will only create a new thread if the current one is not alive.
+     */
     fun start() {
-        if (handlerThread != null && handlerThread!!.isAlive) return
-        val thread = HandlerThread("GlVideoProcessor").apply { start() }
-        handlerThread = thread
-        handler = Handler(thread.looper)
+        synchronized(this) {
+            if (handlerThread?.isAlive == true) return
+            val thread = HandlerThread("GlVideoProcessor").apply { start() }
+            handlerThread = thread
+            handler = Handler(thread.looper)
+        }
     }
 
+    /**
+     * Reset GL state without killing the thread.
+     * Used when switching cameras or toggling photo/video mode.
+     */
     fun resetGL() {
         handler?.post {
+            _onInputSurfaceReady = null
             releaseGL()
         }
     }
 
+    /**
+     * Full stop — release GL and kill the thread.
+     * Used only when the Activity goes to background (onPause).
+     */
     fun stop() {
-        handler?.post {
-            releaseGL()
-            handlerThread?.quitSafely()
+        synchronized(this) {
+            val h = handler
+            val t = handlerThread
+            handler = null
+            handlerThread = null
+
+            h?.post {
+                _onInputSurfaceReady = null
+                releaseGL()
+                t?.quitSafely()
+            }
+            // Wait briefly for thread to finish
+            try {
+                t?.join(500)
+            } catch (_: InterruptedException) {}
         }
     }
 
@@ -114,8 +142,6 @@ class GlVideoProcessor(private val context: Context) {
             } else if (recordSurface != null) {
                 recordSurface!!.makeCurrent()
             } else {
-                // If neither surface is ready, ignore for now.
-                // It will be applied again when setDisplaySurface is called.
                 return@post
             }
             lutFilter?.loadLut(assetFileName)
@@ -147,8 +173,9 @@ class GlVideoProcessor(private val context: Context) {
 
         inputSurface = Surface(cameraSurfaceTexture)
         
+        Log.d("GlVideoProcessor", "initGL complete, invoking onInputSurfaceReady callback")
         // Báo về cho main thread
-        onInputSurfaceReady?.invoke(inputSurface!!)
+        _onInputSurfaceReady?.invoke(inputSurface!!)
 
         // Camera sensor thường bị xoay hoặc lật, nhưng TransformMatrix từ SurfaceTexture đã lo việc xoay
         Matrix.setIdentityM(mvpMatrix, 0)

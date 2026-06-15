@@ -330,7 +330,6 @@ class CameraManagerHelper(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun openCamera(textureView: TextureView, cameraId: String? = null) {
         currentTextureView = textureView
-        glVideoProcessor.start()
         try {
             if (cameraId != null) {
                 currentCameraId = cameraId
@@ -1807,9 +1806,7 @@ class CameraManagerHelper(private val context: Context) {
         rawResultsMap.clear()
     }
 
-    fun onAppBackgrounded() {
-        glVideoProcessor.stop()
-    }
+
 
     private var yuvBytes: ByteArray? = null
 

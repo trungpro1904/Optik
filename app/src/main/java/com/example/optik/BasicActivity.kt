@@ -1110,7 +1110,6 @@ class BasicActivity : AppCompatActivity() {
 
     override fun onPause() { 
         cameraHelper.closeCamera()
-        cameraHelper.onAppBackgrounded()
         cameraHelper.stopBackgroundThread()
         orientationEventListener?.disable()
         faceTracker.close()
