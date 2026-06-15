@@ -43,6 +43,8 @@ class GlVideoProcessor(private val context: Context) {
         }
 
     private var isGlInitialized = false
+    private var pendingBufferWidth = 0
+    private var pendingBufferHeight = 0
 
     /**
      * Start the GL handler thread. Safe to call multiple times —
@@ -108,11 +110,14 @@ class GlVideoProcessor(private val context: Context) {
 
     fun recreateDisplaySurface() {
         handler?.post {
+            if (!isGlInitialized || eglCore == null) return@post
             val currentSurface = displaySurface?.surface ?: return@post
-            displaySurface?.release()
-            eglCore?.let {
-                displaySurface = WindowSurface(it, currentSurface, false)
+            try {
+                displaySurface?.release()
+                displaySurface = WindowSurface(eglCore!!, currentSurface, false)
                 displaySurface?.makeCurrent()
+            } catch (e: RuntimeException) {
+                Log.e("GlVideoProcessor", "recreateDisplaySurface failed: ${e.message}")
             }
         }
     }
@@ -130,6 +135,8 @@ class GlVideoProcessor(private val context: Context) {
     }
 
     fun setDefaultBufferSize(width: Int, height: Int) {
+        pendingBufferWidth = width
+        pendingBufferHeight = height
         handler?.post {
             cameraSurfaceTexture?.setDefaultBufferSize(width, height)
         }
@@ -167,6 +174,9 @@ class GlVideoProcessor(private val context: Context) {
         GLES20.glTexParameteri(0x8D65, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
 
         cameraSurfaceTexture = SurfaceTexture(cameraTextureId)
+        if (pendingBufferWidth > 0 && pendingBufferHeight > 0) {
+            cameraSurfaceTexture?.setDefaultBufferSize(pendingBufferWidth, pendingBufferHeight)
+        }
         cameraSurfaceTexture?.setOnFrameAvailableListener({
             handler?.post { drawFrame() }
         }, handler)

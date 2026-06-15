@@ -866,11 +866,6 @@ class CameraManagerHelper(private val context: Context) {
                     }
                 }
             }
-            
-            glVideoProcessor.setDisplaySurface(previewSurface)
-            if (selectedLutFileName != null) {
-                glVideoProcessor.setLut(selectedLutFileName)
-            }
 
             // Chọn một size YUV hợp lệ thay vì hardcode 320x240
             val yuvSizes = map?.getOutputSizes(ImageFormat.YUV_420_888) ?: emptyArray()
@@ -1000,6 +995,7 @@ class CameraManagerHelper(private val context: Context) {
                 }
             }
             
+            // CRITICAL: Set callback BEFORE setDisplaySurface so it's ready when initGL fires
             glVideoProcessor.onInputSurfaceReady = { inputSurface ->
                 surfaces.add(inputSurface)
                 
@@ -1042,6 +1038,12 @@ class CameraManagerHelper(private val context: Context) {
                         Log.e("CameraHelper", "Configuration failed")
                     }
                 }, backgroundHandler)
+            }
+
+            // NOW trigger GL initialization — callback is already set above
+            glVideoProcessor.setDisplaySurface(previewSurface)
+            if (selectedLutFileName != null) {
+                glVideoProcessor.setLut(selectedLutFileName)
             }
         } catch (e: Exception) {
             Log.e("CameraHelper", "Error creating session", e)
