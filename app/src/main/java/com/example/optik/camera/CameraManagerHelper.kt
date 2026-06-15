@@ -936,9 +936,14 @@ class CameraManagerHelper(private val context: Context) {
                 if (rawSizes != null && rawSizes.isNotEmpty()) {
                     val largestRaw = rawSizes.maxByOrNull { it.width * it.height } ?: rawSizes[0]
                     Log.d("CameraHelper", "Creating rawReader: ${largestRaw.width}x${largestRaw.height}")
-                    rawReader = ImageReader.newInstance(largestRaw.width, largestRaw.height, ImageFormat.RAW_SENSOR, 2)
+                    rawReader = ImageReader.newInstance(largestRaw.width, largestRaw.height, ImageFormat.RAW_SENSOR, 4)
                     rawReader?.setOnImageAvailableListener({ reader ->
-                        val image = reader.acquireNextImage()
+                        val image = try {
+                            reader.acquireNextImage()
+                        } catch (e: IllegalStateException) {
+                            Log.e("CameraHelper", "Max images acquired, dropping RAW frame", e)
+                            null
+                        }
                         if (image != null) {
                             val timestamp = image.timestamp
                             Log.d("CameraHelper", "RAW image received, timestamp=$timestamp")

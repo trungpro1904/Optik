@@ -7,6 +7,7 @@ import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
+import android.util.Log
 import com.example.optik.camera.gl.EglCore
 import com.example.optik.camera.gl.GlLutFilter
 import com.example.optik.camera.gl.WindowSurface
@@ -151,42 +152,51 @@ class GlVideoProcessor(private val context: Context) {
         
         if (displaySurface == null && recordSurface == null) return
         
-        if (displaySurface != null) {
-            displaySurface!!.makeCurrent()
-        } else if (recordSurface != null) {
-            recordSurface!!.makeCurrent()
+        try {
+            if (displaySurface != null) {
+                displaySurface!!.makeCurrent()
+            } else if (recordSurface != null) {
+                recordSurface!!.makeCurrent()
+            }
+        } catch (e: RuntimeException) {
+            Log.e("GlVideoProcessor", "makeCurrent failed: ${e.message}")
+            return
         }
-        
         st.updateTexImage()
         st.getTransformMatrix(transformMatrix)
         
         val timestamp = st.timestamp
 
-        // Render ra Display
-        displaySurface?.let {
-            it.makeCurrent()
-            GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        try {
+            // Render ra Display
+            displaySurface?.let {
+                it.makeCurrent()
+                GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-            lutFilter?.draw(cameraTextureId, mvpMatrix, transformMatrix)
-            it.swapBuffers()
-        }
+                lutFilter?.draw(cameraTextureId, mvpMatrix, transformMatrix)
+                it.swapBuffers()
+            }
 
-        // Render ra Record
-        recordSurface?.let {
-            it.makeCurrent()
-            GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            // Render ra Record
+            recordSurface?.let {
+                it.makeCurrent()
+                GLES20.glViewport(0, 0, it.getWidth(), it.getHeight())
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-            val recordMvpMatrix = FloatArray(16)
-            android.opengl.Matrix.setIdentityM(recordMvpMatrix, 0)
-            android.opengl.Matrix.rotateM(recordMvpMatrix, 0, videoOrientation.toFloat(), 0f, 0f, 1f)
+                val recordMvpMatrix = FloatArray(16)
+                android.opengl.Matrix.setIdentityM(recordMvpMatrix, 0)
+                android.opengl.Matrix.rotateM(recordMvpMatrix, 0, videoOrientation.toFloat(), 0f, 0f, 1f)
 
-            lutFilter?.draw(cameraTextureId, recordMvpMatrix, transformMatrix)
-            
-            it.swapBuffers()
+                lutFilter?.draw(cameraTextureId, recordMvpMatrix, transformMatrix)
+                
+                it.setPresentationTime(timestamp)
+                it.swapBuffers()
+            }
+        } catch (e: RuntimeException) {
+            Log.e("GlVideoProcessor", "swapBuffers or makeCurrent failed during drawFrame: ${e.message}")
         }
     }
 
