@@ -750,7 +750,11 @@ class BasicActivity : AppCompatActivity() {
     private fun setupCamera() {
         binding.overlayView.setGridVisible(SettingsManager.getInstance(this).isGridEnabled)
         binding.previewArea.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { cameraHelper.openCamera(binding.previewArea) }
+            override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { 
+                binding.previewArea.postDelayed({
+                    cameraHelper.openCamera(binding.previewArea) 
+                }, 250)
+            }
             override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) {
                 cameraHelper.updateDisplaySurface(android.view.Surface(s))
             }
@@ -1079,7 +1083,13 @@ class BasicActivity : AppCompatActivity() {
         cameraHelper.startBackgroundThread()
         faceTracker.start()
         gestureTracker?.start()
-        if (binding.previewArea.isAvailable) cameraHelper.openCamera(binding.previewArea)
+        
+        if (binding.previewArea.isAvailable) {
+            binding.previewArea.postDelayed({
+                cameraHelper.openCamera(binding.previewArea)
+            }, 250)
+        }
+        
         orientationEventListener?.enable()
         
         val settings = com.example.optik.settings.SettingsManager.getInstance(this)

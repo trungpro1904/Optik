@@ -357,7 +357,9 @@ class ManualActivity : AppCompatActivity() {
     private fun setupCamera() {
         binding.previewArea.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                cameraHelper.openCamera(binding.previewArea)
+                binding.previewArea.postDelayed({
+                    cameraHelper.openCamera(binding.previewArea)
+                }, 250)
             }
             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
                 cameraHelper.updateDisplaySurface(android.view.Surface(surface))
@@ -1687,7 +1689,9 @@ class ManualActivity : AppCompatActivity() {
         super.onResume()
         cameraHelper.startBackgroundThread()
         if (binding.previewArea.isAvailable) {
-            cameraHelper.openCamera(binding.previewArea)
+            binding.previewArea.postDelayed({
+                cameraHelper.openCamera(binding.previewArea)
+            }, 250)
         }
         startInfoBarUpdates()
         orientationEventListener?.enable()
