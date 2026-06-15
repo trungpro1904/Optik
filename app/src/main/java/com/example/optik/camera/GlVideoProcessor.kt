@@ -50,13 +50,17 @@ class GlVideoProcessor(private val context: Context) {
         handler = Handler(thread.looper)
     }
 
-    fun stop() {
+    fun resetGL() {
         handler?.post {
             releaseGL()
         }
-        handlerThread?.quitSafely()
-        handlerThread = null
-        handler = null
+    }
+
+    fun stop() {
+        handler?.post {
+            releaseGL()
+            handlerThread?.quitSafely()
+        }
     }
 
     fun setDisplaySurface(surface: Surface) {

@@ -1800,11 +1800,15 @@ class CameraManagerHelper(private val context: Context) {
         rawReader?.close()
         rawReader = null
         
-        glVideoProcessor.stop()
+        glVideoProcessor.resetGL()
         
         rawImagesMap.values.forEach { it.close() }
         rawImagesMap.clear()
         rawResultsMap.clear()
+    }
+
+    fun onAppBackgrounded() {
+        glVideoProcessor.stop()
     }
 
     private var yuvBytes: ByteArray? = null

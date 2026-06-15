@@ -1702,6 +1702,7 @@ class ManualActivity : AppCompatActivity() {
         stopInfoBarUpdates()
         orientationEventListener?.disable()
         cameraHelper.closeCamera()
+        cameraHelper.onAppBackgrounded()
         cameraHelper.stopBackgroundThread()
         levelSensorHelper?.stop()
         super.onPause()
