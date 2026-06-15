@@ -1765,6 +1765,9 @@ class CameraManagerHelper(private val context: Context) {
         }
         applyCurrentSettingsAndUpdate()
     }
+    fun updateDisplaySurface(surface: Surface) {
+        glVideoProcessor.setDisplaySurface(surface)
+    }
 
     fun closeCamera() {
         orientationEventListener?.disable()

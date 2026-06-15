@@ -751,7 +751,9 @@ class BasicActivity : AppCompatActivity() {
         binding.overlayView.setGridVisible(SettingsManager.getInstance(this).isGridEnabled)
         binding.previewArea.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { cameraHelper.openCamera(binding.previewArea) }
-            override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) {
+                cameraHelper.updateDisplaySurface(android.view.Surface(s))
+            }
             override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean = true
             override fun onSurfaceTextureUpdated(s: android.graphics.SurfaceTexture) {}
         }
