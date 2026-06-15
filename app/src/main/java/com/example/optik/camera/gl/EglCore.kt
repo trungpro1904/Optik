@@ -144,6 +144,20 @@ class EglCore(sharedContext: EGLContext? = null, flags: Int = 0) {
         return eglSurface
     }
 
+    fun createPbufferSurface(width: Int, height: Int): EGLSurface {
+        val surfaceAttribs = intArrayOf(
+            EGL14.EGL_WIDTH, width,
+            EGL14.EGL_HEIGHT, height,
+            EGL14.EGL_NONE
+        )
+        val eglSurface = EGL14.eglCreatePbufferSurface(eglDisplay, eglConfig, surfaceAttribs, 0)
+        checkEglError("eglCreatePbufferSurface")
+        if (eglSurface == null) {
+            throw RuntimeException("surface was null")
+        }
+        return eglSurface
+    }
+
     fun makeCurrent(eglSurface: EGLSurface) {
         if (eglDisplay === EGL14.EGL_NO_DISPLAY) {
             // called makeCurrent() before create?

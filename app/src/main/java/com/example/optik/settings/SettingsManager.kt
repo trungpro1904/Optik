@@ -86,4 +86,73 @@ class SettingsManager private constructor(context: Context) {
     var isHapticEnabled: Boolean
         get() = prefs.getBoolean("isHapticEnabled", true)
         set(value) = prefs.edit().putBoolean("isHapticEnabled", value).apply()
+
+    // Shutter Sound Enabled
+    var isShutterSoundEnabled: Boolean
+        get() = prefs.getBoolean("isShutterSoundEnabled", true)
+        set(value) = prefs.edit().putBoolean("isShutterSoundEnabled", value).apply()
+
+    // ISO Auto (Manual Mode)
+    var isIsoAuto: Boolean
+        get() = prefs.getBoolean("isIsoAuto", true)
+        set(value) = prefs.edit().putBoolean("isIsoAuto", value).apply()
+
+    // Shutter Auto (Manual Mode)
+    var isShutterAuto: Boolean
+        get() = prefs.getBoolean("isShutterAuto", true)
+        set(value) = prefs.edit().putBoolean("isShutterAuto", value).apply()
+        
+    // Flash Mode: 0 = Off, 1 = On/Auto, 2 = Torch
+    var flashMode: Int
+        get() = prefs.getInt("flashMode", 0)
+        set(value) = prefs.edit().putInt("flashMode", value).apply()
+        
+    // Drive Mode: 0 = Single, 1 = Burst, 2 = 10s Timer, 3 = 3s Timer
+    var driveMode: Int
+        get() = prefs.getInt("driveMode", 0)
+        set(value) = prefs.edit().putInt("driveMode", value).apply()
+
+    var focusMode: Int
+        get() = prefs.getInt("focusMode", 0) // 0 = AF, 1 = MF
+        set(value) = prefs.edit().putInt("focusMode", value).apply()
+
+    var manualFocusDistance: Float
+        get() = prefs.getFloat("manualFocusDistance", 0.0f) // 0.0f is infinity
+        set(value) = prefs.edit().putFloat("manualFocusDistance", value).apply()
+
+    // EV Compensation
+    var evCompensation: Float
+        get() = prefs.getFloat("evCompensation", 0.0f)
+        set(value) = prefs.edit().putFloat("evCompensation", value).apply()
+
+    // WB Settings
+    var manualWbMode: String
+        get() = prefs.getString("manualWbMode", "AWB") ?: "AWB"
+        set(value) = prefs.edit().putString("manualWbMode", value).apply()
+
+    var manualKelvin: Int
+        get() = prefs.getInt("manualKelvin", 5500)
+        set(value) = prefs.edit().putInt("manualKelvin", value).apply()
+
+    var manualTintAB: Int
+        get() = prefs.getInt("manualTintAB", 0)
+        set(value) = prefs.edit().putInt("manualTintAB", value).apply()
+
+    var manualTintGM: Int
+        get() = prefs.getInt("manualTintGM", 0)
+        set(value) = prefs.edit().putInt("manualTintGM", value).apply()
+
+    // Metering Mode: 0 = Matrix, 1 = Center, 2 = Spot
+    var meteringMode: Int
+        get() = prefs.getInt("meteringMode", 0)
+        set(value) = prefs.edit().putInt("meteringMode", value).apply()
+
+    // Manual ISO and Shutter precise values
+    var manualIsoValue: Int
+        get() = prefs.getInt("manualIsoValue", 100)
+        set(value) = prefs.edit().putInt("manualIsoValue", value).apply()
+
+    var manualShutterValue: Long
+        get() = prefs.getLong("manualShutterValue", 10000000L) // default 1/100s
+        set(value) = prefs.edit().putLong("manualShutterValue", value).apply()
 }

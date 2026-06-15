@@ -99,7 +99,7 @@ class GlVideoProcessor(private val context: Context) {
         eglCore = EglCore(null, EglCore.FLAG_RECORDABLE)
         
         // Cần 1 pbuffer surface tạm thời để có thể gọi hàm GL trước khi có display surface
-        val tempSurface = eglCore!!.createWindowSurface(SurfaceTexture(10))
+        val tempSurface = eglCore!!.createPbufferSurface(1, 1)
         eglCore!!.makeCurrent(tempSurface)
 
         lutFilter = GlLutFilter(context)

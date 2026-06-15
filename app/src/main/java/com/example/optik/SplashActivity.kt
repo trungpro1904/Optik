@@ -9,6 +9,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.optik.settings.SettingsManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class SplashActivity : AppCompatActivity() {
 
@@ -32,6 +35,17 @@ class SplashActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Khởi tạo và lưu cache các ảnh thumbnail cho LUT slider chạy ngầm
+        val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cinestill.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG", "fuji_c400.PNG", "leica_monochrome.PNG", "gotham.PNG", "call_me_by_your_name.PNG")
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                com.example.optik.camera.LutHelper.initAndCacheThumbnails(this@SplashActivity, lutFiles)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         checkPermissionsAndStart()
     }
 

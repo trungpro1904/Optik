@@ -4,6 +4,8 @@ import android.animation.ObjectAnimator
 import android.content.Intent
 import android.graphics.SurfaceTexture
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.OrientationEventListener
 import android.view.TextureView
 import android.view.View
@@ -24,23 +26,54 @@ import com.google.mediapipe.framework.image.MediaImageBuilder
 class BasicActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBasicBinding
     private lateinit var cameraHelper: CameraManagerHelper
+    private lateinit var objectTracker: com.example.optik.camera.ObjectTracker
     private lateinit var faceTracker: FaceTracker
+    private var gestureTracker: com.example.optik.camera.GestureTracker? = null
     private var orientationEventListener: OrientationEventListener? = null
     private var currentRotation: Float = 0f
+    private var isFaceDetectionEnabled = false
+    private var isCapturing = false
     private var isSwitchingMode = false
     private var expandAnimator: ObjectAnimator? = null
     private var levelSensorHelper: com.example.optik.camera.LevelSensorHelper? = null
+
+    // Gesture State
+    private var lastGestureActionTime = 0L
+    private val GESTURE_COOLDOWN_MS = 3000L
+    private var wasOpenPalm = false
+    private var gestureCountdownRunning = false
+    private var countdownSeconds = 0
+    private var lastTwoHandDistance = -1f
+    
+    // Video Timer State
     private var isRecording = false
     private var imagesSavingCount = 0
+    private var videoRecordingStartTime = 0L
+    private val videoTimerHandler = Handler(Looper.getMainLooper())
+    private val videoTimerRunnable = object : Runnable {
+        override fun run() {
+            if (isRecording) {
+                val elapsed = System.currentTimeMillis() - videoRecordingStartTime
+                val seconds = (elapsed / 1000).toInt()
+                val h = seconds / 3600
+                val m = (seconds % 3600) / 60
+                val s = seconds % 60
+                val timeStr = if (h > 0) String.format("%02d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+                findViewById<android.widget.TextView>(R.id.tv_video_timer)?.text = timeStr
+                videoTimerHandler.postDelayed(this, 500)
+            }
+        }
+    }
     private var videoConfigs: List<CameraManagerHelper.VideoConfig> = emptyList()
     private var isFlashOn = false
     private var isTouchFocusLocked = false
     private var touchLockedFaceCenter: android.graphics.PointF? = null
-    private lateinit var objectTracker: com.example.optik.camera.ObjectTracker
     private var trackedObjectId: Int? = null
     private var isTrackingFace = false
     private var latestObjects: List<com.google.mlkit.vision.objects.DetectedObject> = emptyList()
     private var maxCameraMp = 12
+    
+    private lateinit var soundHelper: com.example.optik.camera.SoundHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +82,7 @@ class BasicActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         cameraHelper = CameraManagerHelper(this)
+        soundHelper = com.example.optik.camera.SoundHelper(this)
         
         objectTracker = com.example.optik.camera.ObjectTracker { objects ->
             latestObjects = objects
@@ -152,21 +186,92 @@ class BasicActivity : AppCompatActivity() {
                 }
             }
         }
-
-        cameraHelper.onImageAvailable = { image ->
-            try {
-                if (binding.previewArea.width > 0) {
-                    val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
-                    val bitmap = binding.previewArea.getBitmap(640, h)
-                    if (bitmap != null) {
-                        objectTracker.processBitmap(bitmap, currentRotation.toInt())
-                        try {
-                            val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
-                            faceTracker.processImage(mpImage, currentRotation.toInt(), android.os.SystemClock.uptimeMillis())
-                        } catch (e: Exception) {}
+        
+        gestureTracker = com.example.optik.camera.GestureTracker(this) { result ->
+            runOnUiThread {
+                if (result == null || result.gestures().isEmpty()) {
+                    binding.overlayView.updateHandLandmarks(null)
+                    wasOpenPalm = false
+                    lastTwoHandDistance = -1f
+                    return@runOnUiThread
+                }
+                
+                binding.overlayView.updateHandLandmarks(result.landmarks())
+                
+                if (System.currentTimeMillis() - lastGestureActionTime < GESTURE_COOLDOWN_MS) {
+                    return@runOnUiThread
+                }
+                
+                val gestures = result.gestures()
+                
+                // Action 1: 1 hand Open Palm -> Closed Fist
+                if (gestures.size == 1) {
+                    val gestureName = gestures[0][0].categoryName()
+                    if (gestureName == "Open_Palm") {
+                        wasOpenPalm = true
+                    } else if (gestureName == "Closed_Fist" && wasOpenPalm) {
+                        wasOpenPalm = false
+                        triggerGestureCapture()
+                    }
+                } else if (gestures.size == 2) {
+                    // Action 2 & 3: 2 hands Open Palm -> Zoom
+                    val gesture1 = gestures[0][0].categoryName()
+                    val gesture2 = gestures[1][0].categoryName()
+                    
+                    if (gesture1 == "Open_Palm" && gesture2 == "Open_Palm") {
+                        val hand1 = result.landmarks()[0]
+                        val hand2 = result.landmarks()[1]
+                        // Use WRIST (0) distance
+                        val dx = hand1[0].x() - hand2[0].x()
+                        val dy = hand1[0].y() - hand2[0].y()
+                        val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                        
+                        if (lastTwoHandDistance > 0) {
+                            val diff = distance - lastTwoHandDistance
+                            if (diff > 0.15f) {
+                                // Moved apart -> Zoom In
+                                switchNextLens(zoomIn = true)
+                                lastGestureActionTime = System.currentTimeMillis()
+                                lastTwoHandDistance = -1f
+                            } else if (diff < -0.15f) {
+                                // Moved closer -> Zoom Out
+                                switchNextLens(zoomIn = false)
+                                lastGestureActionTime = System.currentTimeMillis()
+                                lastTwoHandDistance = -1f
+                            } else {
+                                lastTwoHandDistance = distance
+                            }
+                        } else {
+                            lastTwoHandDistance = distance
+                        }
+                    } else {
+                        lastTwoHandDistance = -1f
                     }
                 }
-            } catch (e: Exception) {}
+            }
+        }
+        var lastAiProcessTime = 0L
+
+        cameraHelper.onImageAvailable = { image ->
+            val currentTime = android.os.SystemClock.uptimeMillis()
+            if (currentTime - lastAiProcessTime > 100) {
+                lastAiProcessTime = currentTime
+                try {
+                    if (binding.previewArea.width > 0) {
+                        val h = (640f * binding.previewArea.height / binding.previewArea.width).toInt()
+                        val bitmap = binding.previewArea.getBitmap(640, h)
+                        if (bitmap != null) {
+                            objectTracker.processBitmap(bitmap, currentRotation.toInt())
+                            try {
+                                val mpImage = com.google.mediapipe.framework.image.BitmapImageBuilder(bitmap).build()
+                                val mpRotation = (360 - currentRotation.toInt()) % 360
+                                faceTracker.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
+                                gestureTracker?.processImage(mpImage, mpRotation, android.os.SystemClock.uptimeMillis())
+                            } catch (e: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
         }
 
         val levelPitch = findViewById<com.example.optik.view.LevelIndicatorView>(R.id.level_pitch)
@@ -253,9 +358,9 @@ class BasicActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        val lutNames = listOf("Gốc", "Backrooms", "Chrome", "Cyberpunk", "Kodacolor", "Light Skin", "Hail Mary", "Retro", "Saturate", "Summer")
-        val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cyberpunk_800t.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG")
-        val lutAdapter = LUTAdapter(lutNames) { selectedLut ->
+        val lutNames = listOf("Gốc", "Backrooms", "Classic Chrome", "CINESTILL", "Kodacolor", "Light Skin", "Hail Mary", "Retro", "Saturation+", "Summer", "Fujifilm C400", "Leica Monochrome", "Gotham", "Call me by your name")
+        val lutFiles = listOf(null, "backrooms.PNG", "classic_chrome.PNG", "cinestill.PNG", "kodacolor_100.PNG", "light_skin.PNG", "project_hail_mary.PNG", "retro_1.PNG", "saturation+.PNG", "summer.PNG", "fuji_c400.PNG", "leica_monochrome.PNG", "gotham.PNG", "call_me_by_your_name.PNG")
+        val lutAdapter = LUTAdapter(lutNames, lutFiles) { selectedLut ->
             val index = lutNames.indexOf(selectedLut)
             if (index >= 0) {
                 cameraHelper.setSelectedLut(lutFiles[index])
@@ -321,8 +426,9 @@ class BasicActivity : AppCompatActivity() {
         binding.btnMenu.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnAlbum.setOnClickListener {
             if (imagesSavingCount > 0) {
-                val albumProgress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator>(R.id.album_progress)
-                albumProgress?.visibility = View.VISIBLE
+                val albumProgress = findViewById<android.view.View>(R.id.album_progress)
+                albumProgress?.visibility = android.view.View.VISIBLE
+                android.widget.Toast.makeText(this, "Đang xử lý ảnh...", android.widget.Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val uri = cameraHelper.getLatestMediaUri()
@@ -471,6 +577,73 @@ class BasicActivity : AppCompatActivity() {
         }
     }
 
+    private fun switchNextLens(zoomIn: Boolean) {
+        val container = binding.lensSelectorContainer
+        if (container.childCount <= 1) return
+        val currentIndex = (0 until container.childCount).indexOfFirst {
+            container.getChildAt(it) == currentSelectedLensBtn
+        }
+        if (currentIndex != -1) {
+            val targetIndex = if (zoomIn) currentIndex + 1 else currentIndex - 1
+            if (targetIndex in 0 until container.childCount) {
+                container.getChildAt(targetIndex).performClick()
+            }
+        }
+    }
+
+    private fun triggerGestureCapture() {
+        if (gestureCountdownRunning || isCapturing) return
+        gestureCountdownRunning = true
+        countdownSeconds = 2
+        
+        val countdownText = android.widget.TextView(this).apply {
+            text = "$countdownSeconds"
+            textSize = 100f
+            setTextColor(android.graphics.Color.WHITE)
+            gravity = android.view.Gravity.CENTER
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        (binding.root as android.view.ViewGroup).addView(countdownText)
+        
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val runnable = object : Runnable {
+            override fun run() {
+                if (countdownSeconds > 0) {
+                    countdownText.text = "$countdownSeconds"
+                    
+                    // Play beep sound (urgent if <= 3s)
+                    if (countdownSeconds <= 3) {
+                        soundHelper.playBeep(2f)
+                    } else {
+                        soundHelper.playBeep(1f)
+                    }
+                    
+                    // Flash effect
+                    binding.previewBlurOverlay.visibility = android.view.View.VISIBLE
+                    binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.WHITE)
+                    binding.previewBlurOverlay.alpha = 0.5f
+                    binding.previewBlurOverlay.animate().alpha(0f).setDuration(200).withEndAction { 
+                        binding.previewBlurOverlay.visibility = android.view.View.GONE 
+                        binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.parseColor("#A0000000"))
+                    }.start()
+                    
+                    countdownSeconds--
+                    handler.postDelayed(this, 1000)
+                } else {
+                    (binding.root as android.view.ViewGroup).removeView(countdownText)
+                    gestureCountdownRunning = false
+                    
+                    binding.bottomPanel.findViewById<android.view.View>(R.id.btn_shutter)?.performClick()
+                    lastGestureActionTime = System.currentTimeMillis()
+                }
+            }
+        }
+        handler.post(runnable)
+    }
+
     private fun showResolutionPopup() {
         val btnRes = binding.topBar.findViewById<TextView>(R.id.btn_resolution) ?: return
         val btnFps = binding.topBar.findViewById<TextView>(R.id.btn_fps) ?: return
@@ -597,7 +770,6 @@ class BasicActivity : AppCompatActivity() {
                 focusBox.x = x - focusBox.width / 2f
                 focusBox.y = y - focusBox.height / 2f
                 
-                // Mặc định focus tĩnh trước, nếu touch trúng face thì đoạn logic onFaceResult ở trên sẽ bám theo.
                 cameraHelper.focusAtPoint(x, y, binding.previewArea.width, binding.previewArea.height, true)
                 touchLockedFaceCenter = android.graphics.PointF(x, y)
                 trackedObjectId = null
@@ -648,6 +820,25 @@ class BasicActivity : AppCompatActivity() {
             videoConfigs = info.videoConfigs
         }
 
+        cameraHelper.onImageSaving = {
+            runOnUiThread {
+                findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility = View.VISIBLE
+            }
+        }
+        
+        cameraHelper.onThumbnailAvailable = { bitmap ->
+            runOnUiThread {
+                findViewById<android.widget.ImageView>(R.id.album_thumbnail)?.setImageBitmap(bitmap)
+            }
+        }
+        
+        cameraHelper.onPictureSaved = { success ->
+            runOnUiThread {
+                isCapturing = false
+                findViewById<android.widget.ProgressBar>(R.id.album_progress)?.visibility = View.GONE
+            }
+        }
+
         cameraHelper.onResolutionsAvailable = { sizes -> 
             runOnUiThread { 
                 maxCameraMp = sizes.maxOfOrNull { it.width * it.height / 1_000_000 } ?: 12
@@ -684,14 +875,38 @@ class BasicActivity : AppCompatActivity() {
                     if (!cameraHelper.startRecording(binding.previewArea, validSize, fps)) {
                         isRecording = false
                         android.widget.Toast.makeText(this@BasicActivity, "Failed to start recording", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        soundHelper.playRecStart()
+                        
+                        // Start timer
+                        videoRecordingStartTime = System.currentTimeMillis()
+                        val tvTimer = findViewById<android.widget.TextView>(R.id.tv_video_timer)
+                        tvTimer?.visibility = View.VISIBLE
+                        tvTimer?.text = "00:00"
+                        videoTimerHandler.postDelayed(videoTimerRunnable, 500)
                     }
                 } else {
+                    soundHelper.playRecStop()
                     cameraHelper.stopRecording()
+                    
+                    // Stop timer
+                    findViewById<android.widget.TextView>(R.id.tv_video_timer)?.visibility = View.GONE
+                    videoTimerHandler.removeCallbacks(videoTimerRunnable)
                 }
                 updateRecordingUI()
             } else {
+                if (isCapturing) return@setOnClickListener
+                isCapturing = true
+                soundHelper.playShutter()
                 binding.previewBlurOverlay.visibility = View.VISIBLE; binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.BLACK); binding.previewBlurOverlay.alpha = 1f
                 binding.previewBlurOverlay.animate().alpha(0f).setDuration(300).withEndAction { binding.previewBlurOverlay.visibility = View.GONE; binding.previewBlurOverlay.setBackgroundColor(android.graphics.Color.parseColor("#A0000000")) }.start()
+                
+                val currentShutterMs = cameraHelper.getCurrentShutterNs() / 1_000_000L
+                if (currentShutterMs >= 125) {
+                    val progressView = findViewById<com.example.optik.view.CaptureProgressView>(R.id.capture_progress_view)
+                    progressView?.startProgress(currentShutterMs)
+                }
+                
                 cameraHelper.captureImage()
             }
         }
@@ -831,7 +1046,8 @@ class BasicActivity : AppCompatActivity() {
             binding.topBar.findViewById(R.id.btn_fps),
             binding.topBar.findViewById(R.id.btn_ev),
             binding.topBar.findViewById(R.id.btn_mode),
-            binding.topBar.findViewById(R.id.btn_ratio)
+            binding.topBar.findViewById(R.id.btn_ratio),
+            findViewById(R.id.capture_progress_view)
         )
         
         viewsToRotate.forEach { view ->
@@ -860,6 +1076,7 @@ class BasicActivity : AppCompatActivity() {
         binding.previewBlurOverlay.alpha = 0f
         cameraHelper.startBackgroundThread()
         faceTracker.start()
+        gestureTracker?.start()
         if (binding.previewArea.isAvailable) cameraHelper.openCamera(binding.previewArea)
         orientationEventListener?.enable()
         
@@ -884,12 +1101,14 @@ class BasicActivity : AppCompatActivity() {
         cameraHelper.stopBackgroundThread()
         orientationEventListener?.disable()
         faceTracker.close()
+        gestureTracker?.close()
         levelSensorHelper?.stop()
         super.onPause() 
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        soundHelper.release()
         try { objectTracker.close() } catch (e: Exception) {}
     }
 }

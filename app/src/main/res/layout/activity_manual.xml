@@ -106,6 +106,68 @@
             app:indicatorColor="@color/white"
             app:trackColor="#80000000" />
 
+            
+        <TextView
+            android:id="@+id/tv_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="@color/white"
+            android:textSize="120sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowRadius="16"
+            android:visibility="gone" />
+            
+        <TextView
+            android:id="@+id/tv_video_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="16dp"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="4"
+            android:background="@drawable/bg_timer"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone"
+            android:text="00:00" />
+            
+        <LinearLayout
+            android:id="@+id/wb_grid_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+            
+            <com.example.optik.view.WhitebalanceGrid
+                android:id="@+id/wb_grid"
+                android:layout_width="280dp"
+                android:layout_height="280dp" />
+                
+            <TextView
+                android:id="@+id/tv_wb_tint_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:layout_marginTop="16dp"
+                android:shadowColor="#80000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="2"
+                android:text="AB: 0   GM: 0" />
+        </LinearLayout>
+            
+        <!-- Focus box (Manual) -->
         <include layout="@layout/layout_focus_box" />
 
         <!-- Lens Selection Panel (Moved to top) -->
@@ -162,6 +224,21 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#A0000000"
+            android:visibility="gone" />
+
+        <!-- Burst Flash Border -->
+        <View
+            android:id="@+id/burst_flash_border"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/burst_border"
+            android:visibility="gone" />
+
+        <com.example.optik.view.CaptureProgressView
+            android:id="@+id/capture_progress_view"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_gravity="center"
             android:visibility="gone" />
 
     </FrameLayout>
@@ -262,6 +339,25 @@
                         android:textSize="18sp" />
                 </LinearLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- EV Adjustment Panel -->
+            <LinearLayout
+                android:id="@+id/ev_adjustment_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#3d4039"
+                android:paddingBottom="16dp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true">
+                
+                <com.example.optik.view.EvSliderView
+                    android:id="@+id/ev_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="100dp" />
+            </LinearLayout>
+
         </FrameLayout>
     </LinearLayout>
 
@@ -317,6 +413,16 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- Unified Manual Settings Panel -->
+    <include
+        android:id="@+id/manual_settings_panel_include"
+        layout="@layout/layout_manual_settings_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottom_panel" />
+
 
     <!-- Bottom Panel -->
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -326,22 +432,24 @@
         android:background="@color/bg_panel"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <!-- Album Button -->
         <ImageView
             android:id="@+id/btn_expand"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:padding="12dp"
-            android:src="@drawable/ic_expand_more"
-            android:rotation="180"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            app:tint="@color/accent_orange"
-            app:layout_constraintTop_toTopOf="parent"
+            android:padding="10dp"
+            android:rotation="180"
+            android:src="@drawable/ic_expand_more"
+            app:layout_constraintBottom_toTopOf="@+id/btn_shutter"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.498"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"/>
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/accent_orange" />
 
-        <!-- Album Button -->
         <FrameLayout
             android:id="@+id/btn_album"
             android:layout_width="64dp"
@@ -351,6 +459,14 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent">
+            <ImageView
+                android:id="@+id/album_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:background="@drawable/bg_album_rounded"
+                android:clipToOutline="true" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

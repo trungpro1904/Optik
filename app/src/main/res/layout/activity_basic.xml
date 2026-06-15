@@ -117,6 +117,25 @@
             android:id="@+id/overlay_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/tv_video_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="16dp"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="4"
+            android:background="@drawable/bg_timer"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:visibility="gone"
+            android:text="00:00" />
             
         <include layout="@layout/layout_focus_box" />
 
@@ -157,6 +176,13 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#A0000000"
+            android:visibility="gone" />
+
+        <com.example.optik.view.CaptureProgressView
+            android:id="@+id/capture_progress_view"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_gravity="center"
             android:visibility="gone" />
 
     </FrameLayout>
@@ -249,19 +275,20 @@
         android:background="@color/black"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <!-- Album Button -->
         <ImageView
             android:id="@+id/btn_expand"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:layout_marginTop="4dp"
-            android:src="@drawable/ic_expand_more"
+            android:layout_marginTop="1dp"
             android:rotation="180"
-            app:tint="@color/accent_orange"
-            app:layout_constraintTop_toTopOf="parent"
+            android:src="@drawable/ic_expand_more"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.498"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"/>
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/accent_orange" />
 
-        <!-- Album Button -->
         <FrameLayout
             android:id="@+id/btn_album"
             android:layout_width="64dp"
@@ -271,6 +298,14 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent">
+            <ImageView
+                android:id="@+id/album_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:background="@drawable/bg_album_rounded"
+                android:clipToOutline="true" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
